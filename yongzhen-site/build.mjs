@@ -11,12 +11,14 @@ const k = (key, v, tag = 'span', extra = '') => `<${tag} data-k="${key}"${extra}
 const navItems = [
   ['/', '首頁'],
   ...S.courses.map(c => [`/courses/${c.slug}/`, c.name]),
-  ['/articles/', '好書佳文分享'],
+  ['label', '好書佳文分享'],
+  ...S.categories.map(c => [`/articles/${c.slug}/`, c.name]),
   ['/#contact', '聯絡我們']
 ];
+const catOf = name => S.categories.find(c => c.name === name);
 
-function layout({ path: p, title, desc, body, ld = [], crumbs = [] }) {
-  const nav = navItems.map(([h, t]) => `<li><a href="${h}"${h === p ? ' aria-current="page"' : ''}>${esc(t)}</a></li>`).join('');
+function layout({ path: p, title, desc, body, ld = [], crumbs = [], cur = '' }) {
+  const nav = navItems.map(([h, t]) => h === 'label' ? `<li class="grp">${esc(t)}</li>` : `<li><a href="${h}"${h === p || h === cur ? ' aria-current="page"' : ''}>${esc(t)}</a></li>`).join('');
   const org = { '@context': 'https://schema.org', '@type': ['LocalBusiness', 'EducationalOrganization'], name: S.brandFull, alternateName: S.assoc, url: S.siteUrl, telephone: S.phone, address: S.address, sameAs: [S.lineUrl] };
   const jsonld = [org, ...ld].map(o => `<script type="application/ld+json">${JSON.stringify(o)}</script>`).join('\n');
   const tiles = S.courses.map(c => `<a class="tile" href="/courses/${c.slug}/"><span class="ph" aria-hidden="true"></span><b>${esc(c.name)}</b></a>`).join('');
@@ -100,16 +102,24 @@ ${secs}<h2>常見問題</h2><div class="faq">${c.faq.map(([q, a]) => `<details o
   }));
 }
 
+const artCard = a => `<article class="card"><span class="badge">${esc(a.cat)}</span><h3><a href="/articles/${a.slug}/">${esc(a.title)}</a></h3><p>${esc(a.desc)}</p><time datetime="${a.date}">${a.date}</time></article>`;
 write('articles/index.html', layout({
-  path: '/articles/', title: `好書佳文分享｜${S.brand}`, desc: `${S.assoc}的好書佳文分享：創辦人生命故事、自然醫學、NLP心理諮詢、芳療、中醫養生、心靈勵志。`,
+  path: '/articles/', title: `好書佳文分享｜${S.brand}`, desc: `${S.assoc}的好書佳文分享：${S.categories.map(c => c.name).join('、')}。`,
   crumbs: [['/', '首頁'], [null, '好書佳文分享']],
-  body: `<h1>好書佳文分享</h1><div class="chips" role="group" aria-label="文章分類"><button class="chip on" data-cat="">全部</button>${S.categories.map(c => `<button class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-<div class="cards" id="artList">${S.articles.map(a => `<article class="card" data-cat="${esc(a.cat)}"><span class="badge">${esc(a.cat)}</span><h3><a href="/articles/${a.slug}/">${esc(a.title)}</a></h3><p>${esc(a.desc)}</p><time datetime="${a.date}">${a.date}</time></article>`).join('')}</div>`
+  body: `<h1>好書佳文分享</h1><p>各系列文章也可以直接從左側選單進入。</p><div class="cards">${S.articles.map(artCard).join('')}</div>`
 }));
+for (const c of S.categories) {
+  const list = S.articles.filter(a => a.cat === c.name);
+  write(`articles/${c.slug}/index.html`, layout({
+    path: `/articles/${c.slug}/`, title: `${c.name}｜好書佳文分享｜${S.brand}`, desc: `${S.assoc}好書佳文分享：${c.name}的文章列表。`,
+    crumbs: [['/', '首頁'], ['/articles/', '好書佳文分享'], [null, c.name]],
+    body: `<h1>${esc(c.name)}</h1><div class="cards">${list.map(artCard).join('') || '<p>文章整理中。</p>'}</div>`
+  }));
+}
 for (const a of S.articles) {
-  const p = `/articles/${a.slug}/`;
+  const p = `/articles/${a.slug}/`, c = catOf(a.cat);
   write(`articles/${a.slug}/index.html`, layout({
-    path: p, title: `${a.title}｜${S.brand}`, desc: a.desc, crumbs: [['/', '首頁'], ['/articles/', '好書佳文分享'], [null, a.title]],
+    path: p, cur: `/articles/${c.slug}/`, title: `${a.title}｜${S.brand}`, desc: a.desc, crumbs: [['/', '首頁'], [`/articles/${c.slug}/`, c.name], [null, a.title]],
     body: `<article><span class="badge">${esc(a.cat)}</span><h1>${esc(a.title)}</h1><time datetime="${a.date}">${a.date}</time>${a.body.map(t => `<p>${esc(t)}</p>`).join('')}</article>`,
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: a.title, datePublished: a.date, articleSection: a.cat, author: { '@type': 'Organization', name: S.brandFull }, mainEntityOfPage: abs(p) }]
   }));
@@ -119,9 +129,9 @@ write('404.html', layout({ path: '/404', title: `找不到頁面｜${S.brand}`, 
 for (const f of ['style.css', 'app.js', 'admin.css', 'admin.js']) fs.copyFileSync(`src/${f}`, `${OUT}/${f}`);
 let adminHtml = fs.readFileSync('src/admin.html', 'utf8').replace('/*SITE_JSON*/null', JSON.stringify(S));
 write('admin/index.html', adminHtml);
-const urls = ['/', ...S.courses.map(c => `/courses/${c.slug}/`), '/articles/', ...S.articles.map(a => `/articles/${a.slug}/`)];
+const urls = ['/', ...S.courses.map(c => `/courses/${c.slug}/`), '/articles/', ...S.categories.map(c => `/articles/${c.slug}/`), ...S.articles.map(a => `/articles/${a.slug}/`)];
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `<url><loc>${abs(u)}</loc></url>`).join('\n')}\n</urlset>\n`);
 write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${abs('/sitemap.xml')}\n`);
-write('llms.txt', `# ${S.brandFull}\n\n> ${S.tagline}\n\n## 三大證照班\n${S.courses.map(c => `- [${c.name}](${abs(`/courses/${c.slug}/`)}): ${c.desc}`).join('\n')}\n\n## 文章\n- [好書佳文分享](${abs('/articles/')})\n`);
-write('_redirects', `# 舊站 301 轉址（Cloudflare Pages）\n${S.courses.map(c => `${c.old} /courses/${c.slug}/ 301`).join('\n')}\n/index.php / 301\n/index.html / 301\n/content_16.html /articles/ 301\n`);
+write('llms.txt', `# ${S.brandFull}\n\n> ${S.tagline}\n\n## 三大證照班\n${S.courses.map(c => `- [${c.name}](${abs(`/courses/${c.slug}/`)}): ${c.desc}`).join('\n')}\n\n## 好書佳文分享\n${S.categories.map(c => `- [${c.name}](${abs(`/articles/${c.slug}/`)})`).join('\n')}\n`);
+write('_redirects', `# 舊站 301 轉址（Cloudflare Pages）\n${S.courses.map(c => `${c.old} /courses/${c.slug}/ 301`).join('\n')}\n/index.php / 301\n/index.html / 301\n/content_16.html /articles/ 301\n${S.categories.map(c => `${c.old} /articles/${c.slug}/ 301`).join('\n')}\n`);
 console.log('built', urls.length, 'pages');

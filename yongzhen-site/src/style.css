@@ -77,3 +77,5 @@ input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line)
 .ok{color:var(--blue-d);font-weight:700;margin:0}
 
 [hidden]{display:none!important}
+.nav li.grp{padding:12px 8px 4px;font-size:12px;letter-spacing:.08em;color:var(--mute);border-bottom:1px solid var(--line);font-weight:700}
+@media(max-width:720px){.nav li.grp{display:none}}

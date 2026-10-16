@@ -3,7 +3,7 @@
 ## 結構
 - `src/site.json`：官網內容（三大證照班、文章分類、聯絡資料、`siteUrl`）
 - `build.mjs`：`node build.mjs` → 輸出 `dist/`（Cloudflare Pages，build output 設為 `dist`）
-- 前台：首頁、三個證照班頁、好書佳文分享（不分第二層，用分類標籤篩選）、右側欄保留
+- 前台：首頁、三個證照班頁、好書佳文六個系列直接放在左側選單頂層（不分第二層），各有列表頁、右側欄保留
 - 後台：`/admin/`（預設密碼 `demo1234`）四個分頁：總覽、課程月曆、官網內容、設定
 - `dist/_redirects`：舊站 301（content_5 → 四合一國證班、content_2 → NLP證照課程、content_26 → TQUK/Ofqual高階班、content_16 → 好書佳文分享）
 
