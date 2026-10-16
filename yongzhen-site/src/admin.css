@@ -1,0 +1,31 @@
+:root{--blue:#1f5fa8;--blue-d:#14416f;--blue-l:#e8f1fb;--ink:#1c2733;--mute:#5b6b7b;--line:#d7e2ef;--bg:#fff;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--blue:#6aa6ea;--blue-d:#9cc4f3;--blue-l:#14243a;--ink:#e6edf5;--mute:#9db0c4;--line:#27384d;--bg:#0e1621;--bad:#f2837c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",sans-serif}
+.demo{background:var(--blue-l);color:var(--blue-d);text-align:center;font-size:13px;padding:5px}
+.login{max-width:340px;margin:12vh auto;padding:24px;border:1px solid var(--line);border-radius:14px;display:grid;gap:12px}
+.login h1{margin:0;font-size:20px;color:var(--blue-d)}
+header.top{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header.top b{color:var(--blue-d);font-size:17px;margin-right:auto;white-space:nowrap}
+nav.tabs{display:flex;gap:6px;overflow-x:auto}
+.tab{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:6px 16px;cursor:pointer;font:inherit;white-space:nowrap}
+.tab.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:12px 16px}.stat b{display:block;font-size:28px;color:var(--blue-d)}.stat span{color:var(--mute);font-size:13px}
+h2{font-size:17px;color:var(--blue-d);margin:22px 0 8px}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:8px 0}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:var(--mute);font-weight:500;white-space:nowrap}
+input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+label{display:grid;gap:4px;font-weight:700;margin:10px 0}label small{font-weight:400;color:var(--mute)}
+.btn{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:8px 16px;border-radius:8px;border:1px solid var(--blue);background:var(--blue);color:#fff;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--blue)}.btn.sm{padding:3px 10px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .h{text-align:center;color:var(--mute);font-size:13px}
+.day{min-height:64px;border:1px solid var(--line);border-radius:8px;padding:4px;cursor:pointer;font-size:12px;background:var(--bg);color:var(--ink);text-align:left;font-family:inherit}
+.day.on{outline:2px solid var(--blue)}.day.empty{border:0;cursor:default}.day i{font-style:normal;display:block;background:var(--blue-l);color:var(--blue-d);border-radius:4px;padding:0 4px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--blue-d);color:#fff;padding:8px 18px;border-radius:999px;z-index:9}
+.thumb{width:120px;height:80px;border:1px dashed var(--line);border-radius:8px;background:var(--blue-l) center/cover;display:grid;place-items:center;color:var(--mute);font-size:12px}
+@media(max-width:600px){.day{min-height:48px;font-size:11px}}
+
+[hidden]{display:none!important}
