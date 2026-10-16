@@ -19,10 +19,17 @@ const navItems = [
 ];
 const catOf = name => S.categories.find(c => c.name === name);
 
-function layout({ path: p, title, desc, body, ld = [], crumbs = [], cur = '', extraScript = '' }) {
+function layout({ path: p, title, desc, body, ld = [], crumbs = [], cur = '', extraScript = '', noindex = false }) {
   const nav = navItems.map(([h, t]) => h === 'label' ? `<li class="grp">${esc(t)}</li>` : `<li><a href="${h}"${h === p || h === cur ? ' aria-current="page"' : ''}>${esc(t)}</a></li>`).join('');
-  const org = { '@context': 'https://schema.org', '@type': ['LocalBusiness', 'EducationalOrganization'], name: S.brandFull, alternateName: S.assoc, url: S.siteUrl, telephone: S.phone, address: S.address, sameAs: [S.lineUrl] };
-  const jsonld = [org, ...ld].map(o => `<script type="application/ld+json">${JSON.stringify(o)}</script>`).join('\n');
+  const org = {
+    '@context': 'https://schema.org', '@type': ['LocalBusiness', 'EducationalOrganization'], '@id': abs('/#org'),
+    name: S.brandFull, alternateName: S.assoc, url: S.siteUrl, telephone: S.phone, image: abs(S.ogImage),
+    address: { '@type': 'PostalAddress', addressCountry: S.addr.country, addressRegion: S.addr.region, addressLocality: S.addr.locality, streetAddress: S.addr.street },
+    areaServed: S.addr.region, sameAs: [S.lineUrl],
+    hasOfferCatalog: { '@type': 'OfferCatalog', name: '國際證照班', itemListElement: S.courses.map(c => ({ '@type': 'Offer', itemOffered: { '@type': 'Service', name: c.name, url: abs(`/courses/${c.slug}/`) } })) }
+  };
+  const bc = crumbs.length ? [{ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map(([h, t], i) => ({ '@type': 'ListItem', position: i + 1, name: t, item: h ? abs(h) : abs(p) })) }] : [];
+  const jsonld = [org, ...bc, ...ld.filter(o => o['@type'] !== 'BreadcrumbList')].map(o => `<script type="application/ld+json">${JSON.stringify(o)}</script>`).join('\n');
   const tiles = S.courses.map(c => `<a class="tile" href="/courses/${c.slug}/"><span class="ph" aria-hidden="true"></span><b>${esc(c.name)}</b></a>`).join('');
   return `<!doctype html>
 <html lang="zh-Hant-TW"><head>
@@ -30,7 +37,9 @@ function layout({ path: p, title, desc, body, ld = [], crumbs = [], cur = '', ex
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${abs(p)}">
-<meta property="og:type" content="website"><meta property="og:locale" content="zh_TW">
+<meta name="robots" content="${noindex ? 'noindex,nofollow' : 'index,follow,max-image-preview:large'}">
+<meta property="og:type" content="website"><meta property="og:locale" content="zh_TW"><meta property="og:site_name" content="${esc(S.brand)}">
+<meta property="og:image" content="${abs(S.ogImage)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="${esc(S.brandFull)}"><meta name="twitter:card" content="summary_large_image">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}"><meta property="og:url" content="${abs(p)}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%231f5fa8%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27white%27%3E樂%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css">
@@ -99,18 +108,20 @@ for (const c of S.courses) {
     path: p, title: `${c.h1}｜${S.brand}`, desc: c.desc, crumbs: [['/', '首頁'], [null, c.name]],
     body: `<span class="badge">${esc(c.badge)}</span><h1>${esc(c.h1)}</h1><p class="lead-p"><strong>${esc(c.summary)}</strong></p>
 <span class="ph wide" data-photo="course.${c.slug}" aria-hidden="true">課程照片待補</span>
-<table class="facts">${c.facts.map(([a, b]) => `<tr><th>${esc(a)}</th><td>${esc(b)}</td></tr>`).join('')}</table>
+<table class="facts">${c.facts.map(([a, b], i) => `<tr><th>${esc(a)}</th><td data-k="course.${c.slug}.fact.${i}">${esc(b)}</td></tr>`).join('')}</table>
 <div class="band"><b>想了解開班資訊？</b><a class="btn primary" href="${S.phoneHref}">電話報名諮詢</a><a class="btn ghost" href="${S.lineUrl}" data-line>官方帳號詢問</a></div>
 ${secs}<h2>常見問題</h2><div class="faq">${c.faq.map(([q, a]) => `<details open><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div>`,
     ld: [
       { '@context': 'https://schema.org', '@type': 'Course', name: c.h1, description: c.desc, provider: { '@type': 'Organization', name: S.brandFull, url: S.siteUrl }, keywords: c.keywords.join(',') },
+      { '@context': 'https://schema.org', '@type': 'Service', name: c.name, description: c.desc, serviceType: '國際證照課程', provider: { '@id': abs('/#org') }, areaServed: S.addr.region, url: abs(p) },
       { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: c.faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
       { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: '首頁', item: S.siteUrl + '/' }, { '@type': 'ListItem', position: 2, name: c.name, item: abs(p) }] }
     ]
   }));
 }
 
-const artCard = a => `<article class="card"><span class="badge">${esc(a.cat)}</span><h3><a href="/articles/${a.slug}/">${esc(a.title)}</a></h3><p>${esc(a.desc)}</p><time datetime="${a.date}">${a.date}</time></article>`;
+const descOf = a => a.desc.length >= 30 ? a.desc : `${a.desc}（${S.assoc}好書佳文分享：${a.cat}）`;
+const artCard = a => `<article class="card"><span class="badge">${esc(a.cat)}</span><h2><a href="/articles/${a.slug}/">${esc(a.title)}</a></h2><p>${esc(a.desc)}</p><time datetime="${a.date}">${a.date}</time></article>`;
 write('articles/index.html', layout({
   path: '/articles/', title: `好書佳文分享｜${S.brand}`, desc: `${S.assoc}的好書佳文分享：${S.categories.map(c => c.name).join('、')}。`,
   crumbs: [['/', '首頁'], [null, '好書佳文分享']],
@@ -119,7 +130,7 @@ write('articles/index.html', layout({
 for (const c of S.categories) {
   const list = S.articles.filter(a => a.cat === c.name);
   write(`articles/${c.slug}/index.html`, layout({
-    path: `/articles/${c.slug}/`, title: `${c.name}｜好書佳文分享｜${S.brand}`, desc: `${S.assoc}好書佳文分享：${c.name}的文章列表。`,
+    path: `/articles/${c.slug}/`, title: `${c.name}｜好書佳文分享｜${S.brand}`, desc: `${S.assoc}好書佳文分享「${c.name}」，整理相關的文章與閱讀心得，歡迎瀏覽與分享。`,
     crumbs: [['/', '首頁'], ['/articles/', '好書佳文分享'], [null, c.name]],
     body: `<h1>${esc(c.name)}</h1><div class="cards">${list.map(artCard).join('') || '<p>文章整理中。</p>'}</div>`
   }));
@@ -127,15 +138,15 @@ for (const c of S.categories) {
 for (const a of S.articles) {
   const p = `/articles/${a.slug}/`, c = catOf(a.cat);
   write(`articles/${a.slug}/index.html`, layout({
-    path: p, cur: `/articles/${c.slug}/`, title: `${a.title}｜${S.brand}`, desc: a.desc, crumbs: [['/', '首頁'], [`/articles/${c.slug}/`, c.name], [null, a.title]],
+    path: p, cur: `/articles/${c.slug}/`, title: `${a.title}｜${S.brand}`, desc: descOf(a), crumbs: [['/', '首頁'], [`/articles/${c.slug}/`, c.name], [null, a.title]],
     body: `<article><span class="badge">${esc(a.cat)}</span><h1>${esc(a.title)}</h1><time datetime="${a.date}">${a.date}</time>${a.body.map(t => `<p>${esc(t)}</p>`).join('')}</article>`,
-    ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: a.title, datePublished: a.date, articleSection: a.cat, author: { '@type': 'Organization', name: S.brandFull }, mainEntityOfPage: abs(p) }]
+    ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: a.title, datePublished: a.date, dateModified: a.date, image: abs(S.ogImage), articleSection: a.cat, author: { '@type': 'Organization', name: S.brandFull }, mainEntityOfPage: abs(p) }]
   }));
 }
 
 // News
 write('news/index.html', layout({
-  path: '/news/', title: `最新消息｜${S.brand}`, desc: `${S.assoc}最新消息與開班公告。`, crumbs: [['/', '首頁'], [null, '最新消息']],
+  path: '/news/', title: `最新消息｜${S.brand}`, desc: `${S.assoc}（${S.brand}）最新消息、開班公告與說明會資訊，歡迎隨時查看。`, crumbs: [['/', '首頁'], [null, '最新消息']],
   body: `<h1>最新消息</h1><div id="newsList" data-news="all">${S.news.map(n => `<article class="news-item" id="${n.id}"><time datetime="${n.date}">${n.date}</time><h2>${esc(n.title)}</h2><p>${esc(n.body)}</p></article>`).join('')}</div>`
 }));
 
@@ -176,14 +187,19 @@ write('terms/index.html', layout({
 <h2>六、準據法與管轄</h2><p>本條款以中華民國法律為準據法，如有爭議，以【待客戶提供】地方法院為第一審管轄法院。</p>`
 }));
 
-write('404.html', layout({ path: '/404', title: `找不到頁面｜${S.brand}`, desc: '找不到頁面', body: '<h1>找不到這個頁面</h1><p><a href="/">回首頁</a>，或從左側選單選擇證照班。</p>' }));
+write('404.html', layout({ noindex: true, path: '/404', title: `找不到頁面｜${S.brand}`, desc: '找不到頁面', body: '<h1>找不到這個頁面</h1><p><a href="/">回首頁</a>，或從左側選單選擇證照班。</p>' }));
 
 for (const f of ['style.css', 'app.js', 'shared.js', 'booking.js', 'admin.css', 'admin.js']) fs.copyFileSync(`src/${f}`, `${OUT}/${f}`);
 let adminHtml = fs.readFileSync('src/admin.html', 'utf8').replace('/*SITE_JSON*/null', JSON.stringify(S));
 write('admin/index.html', adminHtml);
 const urls = ['/', ...S.courses.map(c => `/courses/${c.slug}/`), '/articles/', '/news/', '/booking/', '/privacy/', '/terms/', ...S.categories.map(c => `/articles/${c.slug}/`), ...S.articles.map(a => `/articles/${a.slug}/`)];
-write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `<url><loc>${abs(u)}</loc></url>`).join('\n')}\n</urlset>\n`);
-write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${abs('/sitemap.xml')}\n`);
+const today = new Date().toISOString().slice(0, 10);
+write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `<url><loc>${abs(u)}</loc><lastmod>${today}</lastmod></url>`).join('\n')}\n</urlset>\n`);
+const AI_BOTS = ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'Google-Extended', 'PerplexityBot', 'ClaudeBot', 'Claude-SearchBot', 'anthropic-ai', 'Applebot-Extended', 'CCBot'];
+const blocked = new Set(S.aiBlock || []);
+write('robots.txt', `# 一般搜尋引擎與 AI 搜尋／生成式引擎皆可擷取公開頁面；甲方得於 src/site.json 的 aiBlock 指定排除\nUser-agent: *\nAllow: /\nDisallow: /admin\n\n${AI_BOTS.map(b => `User-agent: ${b}\n${blocked.has(b) ? 'Disallow: /' : 'Allow: /\nDisallow: /admin'}\n`).join('\n')}\nSitemap: ${abs('/sitemap.xml')}\n`);
+write('_headers', `/admin/*\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-store\n/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: SAMEORIGIN\n/*.css\n  Cache-Control: public, max-age=3600\n/*.js\n  Cache-Control: public, max-age=3600\n`);
+fs.copyFileSync('src/og.png', `${OUT}/og.png`);
 write('llms.txt', `# ${S.brandFull}\n\n> ${S.tagline}\n\n## 三大證照班\n${S.courses.map(c => `- [${c.name}](${abs(`/courses/${c.slug}/`)}): ${c.desc}`).join('\n')}\n\n## 好書佳文分享\n${S.categories.map(c => `- [${c.name}](${abs(`/articles/${c.slug}/`)})`).join('\n')}\n`);
 write('_redirects', `# 舊站 301 轉址（Cloudflare Pages）\n${S.courses.map(c => `${c.old} /courses/${c.slug}/ 301`).join('\n')}\n/index.php / 301\n/index.html / 301\n/news.html /news/ 301\n/content_16.html /articles/ 301\n${S.categories.map(c => `${c.old} /articles/${c.slug}/ 301`).join('\n')}\n`);
 console.log('built', urls.length, 'pages');

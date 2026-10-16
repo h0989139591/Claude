@@ -74,6 +74,7 @@ function content(el){
   h+='<h2>首頁</h2><label>主標題<input id="f_heroTitle" value="'+esc(val('heroTitle',S.heroTitle))+'"></label><label>副標題<textarea id="f_heroSub" rows="2">'+esc(val('heroSub',S.heroSub))+'</textarea></label>';
   h+='<h2>三個證照班簡介</h2>'+S.courses.map(function(c){return '<label>'+esc(c.name)+'<textarea id="f_course.'+c.slug+'.summary" rows="2">'+esc(val('course.'+c.slug+'.summary',c.summary))+'</textarea></label>'}).join('');
   var news=get('yz_news',null)||S.news;
+  h+='<h2>課程資訊（時數、學費、報名資格）</h2>'+S.courses.map(function(c){return '<div class="card"><b>'+esc(c.name)+'</b>'+c.facts.map(function(f,i){var k='course.'+c.slug+'.fact.'+i;return '<label>'+esc(f[0])+'<input id="f_'+k+'" value="'+esc(val(k,f[1]))+'"></label>'}).join('')+'</div>'}).join('');
   h+='<h2>最新消息</h2><div id="newsRows">'+news.map(newsRow).join('')+'</div><button class="btn ghost sm" id="addn">＋新增一則</button>';
   h+='<h2>常見問題</h2><div id="faqs">'+faq.map(function(f,i){return faqRow(f,i)}).join('')+'</div><button class="btn ghost sm" id="addf">＋新增一題</button>';
   var slots=[['slide.1','首頁輪播第 1 張'],['slide.2','首頁輪播第 2 張'],['slide.3','首頁輪播第 3 張']].concat(S.courses.map(function(c){return ['course.'+c.slug,c.name+'（卡片與課程頁大圖）']}));

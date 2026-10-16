@@ -342,5 +342,13 @@
       "title": "【範例】歡迎預約說明會／試聽",
       "body": "【範例內容】可於「預約說明會」選擇場次，名額有限。"
     }
-  ]
+  ],
+  "addr": {
+    "country": "TW",
+    "region": "桃園市",
+    "locality": "桃園區",
+    "street": "中山路549號15樓"
+  },
+  "ogImage": "/og.png",
+  "aiBlock": []
 }
