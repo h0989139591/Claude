@@ -29,3 +29,5 @@ label{display:grid;gap:4px;font-weight:700;margin:10px 0}label small{font-weight
 @media(max-width:600px){.day{min-height:48px;font-size:11px}}
 
 [hidden]{display:none!important}
+
+.srow{display:grid;grid-template-columns:1.6fr 1.2fr 1fr .8fr;gap:8px;border-top:1px dashed var(--line);padding-top:4px}@media(max-width:700px){.srow{grid-template-columns:1fr 1fr}}

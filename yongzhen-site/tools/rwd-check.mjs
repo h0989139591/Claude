@@ -28,7 +28,7 @@ for (const [label, w, h] of sizes) {
       document.querySelectorAll('a,button,input,select,textarea,summary').forEach(e => {
         const b = e.getBoundingClientRect(), cs = getComputedStyle(e);
         if (!b.width || cs.visibility === 'hidden' || cs.display === 'none' || e.closest('[hidden],dialog:not([open])')) return;
-        if (e.tagName === 'A' && e.closest('p,li,footer,.crumb,.faq,.box') && cs.display === 'inline') return; // 內文連結不計
+        if (e.tagName === 'A' && e.closest('p,li,footer,.crumb,.faq,.box,h2,h3,h4,.prose') && cs.display === 'inline') return; // 內文連結不計
         const af = getComputedStyle(e, '::after'); if (af.content !== 'none' && af.position === 'absolute') return; // 整張卡片可點
         if (e.closest('.dots') ? (b.height < 24 || b.width < 24) : (b.height < 36 || b.width < 24)) out.small.push((e.textContent || e.name || e.tagName).trim().slice(0, 14) + ` ${Math.round(b.width)}x${Math.round(b.height)}`);
       });

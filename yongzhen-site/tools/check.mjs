@@ -48,8 +48,9 @@ for (const f of pub) {
   if (u !== '/') ok(has('BreadcrumbList'), `${tag} 缺 BreadcrumbList`);
   nodes.filter(n => types(n).includes('BreadcrumbList')).forEach(n => n.itemListElement.forEach((it, i) => ok(it.position === i + 1 && it.name && it.item, `${tag} Breadcrumb 項目不全`)));
   nodes.filter(n => types(n).includes('FAQPage')).forEach(n => { ok(n.mainEntity.length > 0, `${tag} FAQPage 無問題`); n.mainEntity.forEach(q => ok(q.name && q.acceptedAnswer?.text, `${tag} FAQ 項目不全`)); });
-  if (u.startsWith('/courses/')) {
-    ok(has('Course') && has('Service') && has('FAQPage'), `${tag} 課程頁缺 Course/Service/FAQPage`);
+  if (u.startsWith('/courses/') && u !== '/courses/') {
+    const main = S.courses.some(c => `/courses/${c.slug}/` === u);
+    ok(has('Course') && (!main || (has('Service') && has('FAQPage'))), `${tag} 課程頁缺 Course${main ? '/Service/FAQPage' : ''}`);
     const c = nodes.find(n => types(n).includes('Course')); if (c) ok(c.name && c.description && c.provider?.name, `${tag} Course 必填欄位不全`);
   }
   if (/^\/articles\/[^/]+\/$/.test(u) && !S.categories.some(c => `/articles/${c.slug}/` === u) ) { const a = nodes.find(n => types(n).includes('Article')); ok(a && a.headline && a.datePublished && a.author && a.image, `${tag} Article 欄位不全`); }

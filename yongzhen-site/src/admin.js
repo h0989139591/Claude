@@ -69,10 +69,12 @@ function calendar(el){
 function content(el){
   var C=get('yz_content',{});
   function val(k,d){return C[k]!=null?C[k]:d}
-  var faq=C.faq||S.courses.flatMap(function(c){return c.faq}).slice(0,4);
+  var faq=C.faq||S.faq;
   var h='<p>改完按「儲存」，再到官網重新整理就會看到（示範模式）。</p>';
   h+='<h2>首頁</h2><label>主標題<input id="f_heroTitle" value="'+esc(val('heroTitle',S.heroTitle))+'"></label><label>副標題<textarea id="f_heroSub" rows="2">'+esc(val('heroSub',S.heroSub))+'</textarea></label>';
   h+='<h2>三個證照班簡介</h2>'+S.courses.map(function(c){return '<label>'+esc(c.name)+'<textarea id="f_course.'+c.slug+'.summary" rows="2">'+esc(val('course.'+c.slug+'.summary',c.summary))+'</textarea></label>'}).join('');
+  var groups=get('yz_sched',null)||S.schedule.groups;
+  h+='<h2>最新開課資訊</h2><p>改完按「儲存」。日期欄用來排序與自動隱藏過期場次。</p>'+groups.map(function(g,gi){return '<div class="card"><b>'+esc(g.name)+'</b>'+g.items.map(function(it,ii){return '<div class="srow" data-g="'+gi+'" data-i="'+ii+'"><label>班別<input class="sk" value="'+esc(it.kind)+'"></label><label>日期顯示<input class="sd" value="'+esc(it.date)+'"></label><label>日期<input class="si" type="date" value="'+esc(it.iso)+'"></label><label>狀態<select class="ss">'+['招生中','將開課','額滿','已結束'].map(function(x){return '<option'+(x===it.status?' selected':'')+'>'+x+'</option>'}).join('')+'</select></label></div>'}).join('')+'</div>'}).join('');
   var news=get('yz_news',null)||S.news;
   h+='<h2>課程資訊（時數、學費、報名資格）</h2>'+S.courses.map(function(c){return '<div class="card"><b>'+esc(c.name)+'</b>'+c.facts.map(function(f,i){var k='course.'+c.slug+'.fact.'+i;return '<label>'+esc(f[0])+'<input id="f_'+k+'" value="'+esc(val(k,f[1]))+'"></label>'}).join('')+'</div>'}).join('');
   h+='<h2>最新消息</h2><div id="newsRows">'+news.map(newsRow).join('')+'</div><button class="btn ghost sm" id="addn">＋新增一則</button>';
@@ -96,6 +98,9 @@ function content(el){
     el.querySelectorAll('[id^=f_]').forEach(function(i){var k=i.id.slice(2);if(i.value.trim())c[k]=i.value.trim();else delete c[k]});
     var qs=[].slice.call(el.querySelectorAll('.fq')),as=[].slice.call(el.querySelectorAll('.fa'));
     c.faq=qs.map(function(q,i){return [q.value.trim(),as[i].value.trim()]}).filter(function(x){return x[0]&&x[1]});
+    var gs=JSON.parse(JSON.stringify(get('yz_sched',null)||S.schedule.groups));
+    el.querySelectorAll('.srow').forEach(function(r){var it=gs[+r.dataset.g].items[+r.dataset.i];it.kind=r.querySelector('.sk').value.trim()||it.kind;it.date=r.querySelector('.sd').value.trim()||it.date;it.iso=r.querySelector('.si').value||it.iso;it.status=r.querySelector('.ss').value});
+    set('yz_sched',gs);
     var rows=[].slice.call(el.querySelectorAll('.newsr')).map(function(r,i){return {id:'n'+Date.now()+i,date:r.querySelector('.nd').value,title:r.querySelector('.nt').value.trim(),body:r.querySelector('.nb').value.trim()}}).filter(function(n){return n.title});
     rows.sort(function(a,b){return a.date<b.date?1:-1});set('yz_news',rows);
     set('yz_content',c);toast('已儲存');
@@ -104,12 +109,12 @@ function content(el){
 
 function settings(el){
   var C=get('yz_content',{});
-  el.innerHTML='<h2>官網聯絡資料</h2><label>電話<input id="s_phone" value="'+esc(C.phone||S.phone)+'"></label><label>地址<input id="s_address" value="'+esc(C.address||S.address)+'"></label><label>營業／上課時間<input id="s_hours" value="'+esc(C.hours||S.hours)+'"></label><label>LINE 官方帳號 ID<input id="s_lineId" value="'+esc(C.lineId||S.lineId)+'"></label><p><button class="btn" id="sc">儲存聯絡資料</button></p>'
+  el.innerHTML='<h2>官網聯絡資料</h2><label>電話<input id="s_phone" value="'+esc(C.phone||S.phone)+'"></label><label>地址<input id="s_address" value="'+esc(C.address||S.address)+'"></label><label>營業／上課時間<input id="s_hours" value="'+esc(C.hours||S.hours)+'"></label><label>LINE 官方帳號 ID<input id="s_lineId" value="'+esc(C.lineId||S.lineId)+'"></label><label>E-mail<input id="s_email" value="'+esc(C.email||S.email)+'"></label><p><button class="btn" id="sc">儲存聯絡資料</button></p>'
    +'<h2>修改我的密碼</h2><label>新密碼（至少 8 碼）<input type="password" id="np" autocomplete="new-password"></label><p><button class="btn" id="sp">更新密碼</button></p>'
    +'<h2>示範資料</h2><p><button class="btn ghost" id="rs">重設所有示範資料</button></p>';
-  $('#sc').onclick=function(){var c=get('yz_content',{});['phone','address','hours','lineId'].forEach(function(k){var v=$('#s_'+k).value.trim();if(v)c[k]=v});set('yz_content',c);toast('已儲存')};
+  $('#sc').onclick=function(){var c=get('yz_content',{});['phone','address','hours','lineId','email'].forEach(function(k){var v=$('#s_'+k).value.trim();if(v)c[k]=v});set('yz_content',c);toast('已儲存')};
   $('#sp').onclick=function(){var v=$('#np').value;if(v.length<8){toast('密碼至少 8 碼');return}ST.pw=v;set('yz_admin',ST);$('#np').value='';toast('密碼已更新')};
-  $('#rs').onclick=function(){if(confirm('會清除示範用的課程、諮詢單與官網內容，確定？')){['yz_admin','yz_content','yz_leads','yz_news','yz_bookings'].forEach(function(k){localStorage.removeItem(k)});ST=state();toast('已重設');render()}};
+  $('#rs').onclick=function(){if(confirm('會清除示範用的課程、諮詢單與官網內容，確定？')){['yz_admin','yz_content','yz_leads','yz_news','yz_bookings','yz_sched'].forEach(function(k){localStorage.removeItem(k)});ST=state();toast('已重設');render()}};
 }
 render();
 })();
