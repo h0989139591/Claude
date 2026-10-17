@@ -129,6 +129,11 @@
      "有複訓嗎？",
      "依當期課程規範，提供學員後續複訓與持續學習的機會。"
     ]
+   ],
+   "related": [
+    "四合一",
+    "身心整合",
+    "第二專長"
    ]
   },
   {
@@ -207,6 +212,10 @@
      "適合哪些人？",
      "工作多年想尋找更深層意義的人、想結合教練技術開展第二職涯的人、想學會整理情緒與目標的人，以及想為團隊建立深度傾聽與和諧溝通的人。"
     ]
+   ],
+   "related": [
+    "NLP",
+    "教練"
    ]
   },
   {
@@ -289,6 +298,12 @@
      "退費規則為何？",
      "開課前退還已繳學費七成；開課後未逾全期 1/4 退還一半；已逾 1/4 恕不退費。"
     ]
+   ],
+   "related": [
+    "高階",
+    "Ofqual",
+    "TQUK",
+    "國際證照解析"
    ]
   }
  ],
@@ -970,5 +985,18 @@
    "h1": "NLP 學習指南：你最想知道的問題",
    "lead": "國際 NLP 專業執行師暨心理諮詢師雙認證課程｜美國 iNLP × 英國 IPHM"
   }
- ]
+ ],
+ "merge": {
+  "news/244": "/schedule/four-in-one-global-weekday/",
+  "news/247": "/schedule/four-in-one-global-holiday/",
+  "news/262": "/schedule/four-in-one-global-holiday/",
+  "news/248": "/schedule/four-in-one-north-holiday/",
+  "news/249": "/schedule/four-in-one-north-weekday/",
+  "news/260": "/schedule/nlp-holiday/",
+  "news/52": "/news/234/",
+  "news/100": "/news/234/"
+ },
+ "canonical": {
+  "news/257": "/articles/life-story/"
+ }
 }

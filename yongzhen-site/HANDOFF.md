@@ -40,3 +40,8 @@ npx serve dist            # 或 python -m http.server -d dist
 ## 注意
 - 倉庫根目錄 `/survey.mjs`（雲端容器內）是誤建的空檔，與專案無關。
 - 本機若沒有 playwright，`rwd-check` 會跳過；`check.mjs` 不需要額外套件。
+
+## SEO 內容優化（參考天賜人力做法）
+- 重複內容 301 合併：news 244/247/262/248/249/260 → 對應開課頁，52/100 → 234；257 canonical 指向 /articles/life-story/。
+- 開課頁自動「開課摘要」首段（答案先行）、新聞頁「延伸閱讀」、頁尾補 /classroom/、加 hreflang。
+- 仍待：四合一全球平日/假日班兩頁高度相似（班別不同，保留）；每頁資料來源/更新日期、FAQ 題數與字數門檻尚未逐頁套用（見 source/ref/tianci-seo.md）。

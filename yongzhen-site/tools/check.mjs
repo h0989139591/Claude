@@ -21,7 +21,7 @@ for (const f of pub) {
   const title = m1(h, /<title>([^<]*)/), desc = m1(h, /<meta name="description" content="([^"]*)/);
   ok(title && title.length >= 8 && title.length <= 70, `${tag} title 長度不佳（${title && title.length}）`);
   ok(desc && desc.length >= 30 && desc.length <= 200, `${tag} description 長度不佳（${desc && desc.length}）`);
-  ok(m1(h, /<link rel="canonical" href="([^"]+)/) === S.siteUrl + u, `${tag} canonical 不正確`);
+  ok(m1(h, /<link rel="canonical" href="([^"]+)/) === S.siteUrl + (S.canonical?.[u.replace(/^\/|\/$/g, '')] || u), `${tag} canonical 不正確`);
   for (const k of ['og:title', 'og:description', 'og:url', 'og:image', 'og:type']) ok(h.includes(`property="${k}"`), `${tag} 缺 ${k}`);
   ok(/<html lang="zh-Hant-TW"/.test(h), `${tag} 缺 lang`);
   ok(/name="viewport" content="width=device-width,initial-scale=1"/.test(h), `${tag} 缺 viewport`);
@@ -55,6 +55,22 @@ for (const f of pub) {
   }
   if (/^\/articles\/[^/]+\/$/.test(u) && !S.categories.some(c => `/articles/${c.slug}/` === u) ) { const a = nodes.find(n => types(n).includes('Article')); ok(a && a.headline && a.datePublished && a.author && a.image, `${tag} Article 欄位不全`); }
   if (u === '/') ok(has('FAQPage') && has('ItemList'), `${tag} 首頁缺 FAQPage/ItemList`);
+}
+// 內容品質：標題／描述不可重複、孤兒頁（沒有任何站內連結指向）、內容過少（警告）
+{
+  const seenT = new Map(), seenD = new Map(), inbound = new Map(), thin = [];
+  for (const f of pub) {
+    const h = fs.readFileSync(f, 'utf8'), u = urlOf(f);
+    const t = m1(h, /<title>([^<]*)/), d = m1(h, /<meta name="description" content="([^"]*)/);
+    (seenT.get(t) || seenT.set(t, []).get(t)).push(u); (seenD.get(d) || seenD.set(d, []).get(d)).push(u);
+    for (const m of h.matchAll(/<a [^>]*href="(\/[^"#]*)/g)) { const to = m[1].endsWith('/') || m[1].includes('.') ? m[1] : m[1] + '/'; if (to !== u) (inbound.get(to) || inbound.set(to, new Set()).get(to)).add(u); }
+    const main = (h.match(/<main>([\s\S]*?)<\/main>/) || [, ''])[1].replace(/<[^>]+>/g, '').replace(/[^\u4e00-\u9fa5]/g, '');
+    if (main.length < 250 && !['/booking/', '/contact/', '/privacy/', '/terms/', '/news/', '/articles/', '/courses/', '/schedule/'].includes(u)) thin.push(`${u}（${main.length} 字）`);
+  }
+  for (const [t, us] of seenT) ok(us.length === 1, `title 重複：${t.slice(0, 30)}… → ${us.join('、')}`);
+  for (const [d, us] of seenD) ok(us.length === 1, `description 重複：${(d || '').slice(0, 30)}… → ${us.join('、')}`);
+  for (const f of pub) { const u = urlOf(f); if (u !== '/') ok(inbound.has(u), `孤兒頁（沒有站內連結指向）：${u}`); }
+  if (thin.length) console.log(`⚠ 內容偏少（<250 字）${thin.length} 頁：${thin.slice(0, 8).join('、')}${thin.length > 8 ? '…' : ''}`);
 }
 // 404、admin
 const nf = fs.readFileSync(`${DIST}/404.html`, 'utf8'); ok(/noindex/.test(nf), '404 應 noindex');

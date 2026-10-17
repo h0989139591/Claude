@@ -172,3 +172,5 @@ main,.box,.card,.fact dd{overflow-wrap:anywhere}
 .prose .gallery img{max-height:none;width:100%}
 
 .gallery img{object-fit:contain;background:#fff;padding:6px}
+
+.rel{margin:28px 0;padding:16px 18px;border:1px solid var(--line,#d6e2f0);border-radius:10px;background:#f4f8fd}.rel b{display:block;margin-bottom:8px}.rel a{display:block;padding:8px 0;min-height:36px}
