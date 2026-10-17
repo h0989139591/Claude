@@ -10,8 +10,57 @@ var ST=YZ.admin(S.courses),pad=YZ.pad,dirty=false,selDay=null,calBase=new Date()
 var C=function(){return get('yz_content',{})};
 var sched=function(){return get('yz_sched',null)||S.schedule.groups};
 
+var PD=null; // 既有可編輯頁面（建置時輸出的 pages.json）
+function PG(){var d=get('yz_pages',null);return d&&d.pages&&d.custom?d:{pages:{},custom:[]}}
+function PGset(d){set('yz_pages',d)}
+function PUB(){return get('yz_pub',{pages:{},custom:[]})}
+function changeCount(){var a=PG(),b=PUB(),n=0;Object.keys(a.pages).forEach(function(x){if(JSON.stringify(a.pages[x])!==JSON.stringify(b.pages[x]))n++});Object.keys(b.pages).forEach(function(x){if(!a.pages[x])n++});
+ var bm={};b.custom.forEach(function(c){bm[c.id]=c});a.custom.forEach(function(c){if(JSON.stringify(c)!==JSON.stringify(bm[c.id]))n++;delete bm[c.id]});return n+Object.keys(bm).length}
+var BLOCKS=[['h2','大標題'],['h3','小標題'],['p','段落'],['ul','清單'],['img','圖片'],['note','重點框'],['faq','問答'],['cta','聯絡按鈕']];
+var BL={h2:'大標題',h3:'小標題',p:'段落',ul:'清單',img:'圖片',note:'重點框',faq:'常見問答',cta:'聯絡按鈕'};
+var RESERVED=['admin','img','news','courses','articles','schedule','faq','about','booking','contact','privacy','terms','teachers','stories','partners','media','videos','knowledge','classroom','uploads','api','style','app'];
+var ED=null;
+function blankBlock(t){return t==='ul'?{type:'ul',items:['']}:t==='img'?{type:'img',src:'',alt:'',caption:''}:t==='note'?{type:'note',title:'重要說明',text:''}:t==='faq'?{type:'faq',items:[{q:'',a:''}]}:t==='cta'?{type:'cta',text:'想進一步了解？'}:{type:t,text:''}}
+function ctaPrev(t){return '<div class="band"><div><b>'+esc(t||'想進一步了解？')+'</b></div><a class="btn primary" href="#">電話諮詢</a><a class="btn ghost" href="#">官方帳號</a></div>'}
+function previewDoc(title,blocks){var r=YZB.render(blocks,{cta:ctaPrev});return '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><base target="_blank"><link rel="stylesheet" href="/style.css"></head><body style="padding:18px;margin:0"><header class="phead"><h1>'+esc(title||'（尚未輸入標題）')+'</h1></header><div class="prose">'+r.html+'</div></body></html>'}
+function blockEd(b,i,n){
+  var h='<div class="blk" data-i="'+i+'"><div class="bh"><b>'+(b.day?'日程標題':BL[b.type]||b.type)+'</b><span class="bc"><button class="btn sm ghost" data-mv="-1" '+(i===0?'disabled':'')+'>↑</button><button class="btn sm ghost" data-mv="1" '+(i===n-1?'disabled':'')+'>↓</button><button class="btn sm danger" data-rm>刪除</button></span></div>';
+  if(b.type==='h2'||b.type==='h3')h+='<input data-f="text" value="'+esc(b.text)+'" placeholder="標題文字">';
+  else if(b.type==='p')h+='<textarea data-f="text" rows="4" placeholder="段落文字">'+esc(b.text)+'</textarea><small class="hint">**粗體**、[文字](網址)；換行會保留。</small>';
+  else if(b.type==='ul')h+='<textarea data-f="items" rows="4" placeholder="一行一項">'+esc((b.items||[]).join('\n'))+'</textarea><small class="hint">一行一項。</small>';
+  else if(b.type==='img')h+='<div class="photo"><div class="thumb" style="'+(b.src?'background-image:url('+esc(b.src)+')':'')+'">'+(b.src?'':'尚未選擇')+'</div><div style="flex:1;min-width:0"><input type="file" accept="image/*" data-up> <input data-f="src" value="'+(b.src&&b.src.indexOf('data:')===0?'':esc(b.src))+'" placeholder="或貼上圖片網址（/img/… 或 https://…）" style="margin-top:8px"></div></div><div class="grid2"><label>圖片說明（替代文字）<input data-f="alt" value="'+esc(b.alt)+'"></label><label>圖說（選填）<input data-f="caption" value="'+esc(b.caption)+'"></label></div>';
+  else if(b.type==='note')h+='<input data-f="title" value="'+esc(b.title)+'" placeholder="標題"><textarea data-f="text" rows="4" placeholder="內容" style="margin-top:8px">'+esc(b.text)+'</textarea>';
+  else if(b.type==='cta')h+='<input data-f="text" value="'+esc(b.text)+'" placeholder="按鈕上方的提示文字"><small class="hint">會顯示「電話諮詢、官方帳號、預約說明會」三個按鈕。</small>';
+  else if(b.type==='faq'){h+=(b.items||[]).map(function(q,j){return '<div class="item"><label>問題<input data-q="'+j+'" data-f="q" value="'+esc(q.q)+'"></label><label>回答<textarea data-q="'+j+'" data-f="a" rows="2">'+esc(q.a)+'</textarea></label><button class="btn sm danger" data-rmq="'+j+'">刪除這題</button></div>'}).join('')+'<button class="btn sm ghost" data-addq>＋ 新增一題</button>'}
+  return h+'</div>';
+}
+function blocksPanel(){return ED.d.blocks.map(function(b,i){return blockEd(b,i,ED.d.blocks.length)}).join('')||'<p class="empty">還沒有內容，從下方加入第一個積木。</p>'}
+var prevT=null;
+function updPrev(){clearTimeout(prevT);prevT=setTimeout(function(){var f=$('#prev');if(f)f.srcdoc=previewDoc(ED.d.h1||ED.d.title,ED.d.blocks)},200)}
+function markDirty(){dirty=true;var st=$('#sbst');if(st){st.className='st dirty';st.textContent='有尚未儲存的修改'}}
+function editorBind(el){
+  var host=$('#bl',el);
+  function redraw(){host.innerHTML=blocksPanel();updPrev()}
+  host.addEventListener('input',function(e){var t=e.target,blk=t.closest('.blk');if(!blk||!t.dataset.f)return;var b=ED.d.blocks[+blk.dataset.i],f=t.dataset.f;
+    if(t.dataset.q!=null){b.items[+t.dataset.q][f]=t.value}else if(f==='items'){b.items=t.value.split('\n')}else{b[f]=t.value;if(f==='src'&&t.value){var th=blk.querySelector('.thumb');if(th){th.style.backgroundImage='url('+t.value+')';th.textContent=''}}}updPrev()});
+  host.addEventListener('change',function(e){var t=e.target;if(!t.hasAttribute('data-up'))return;var f=t.files[0];if(!f)return;if(f.size>1200000){toast('圖片請小於 1.2MB');return}var blk=t.closest('.blk'),r=new FileReader();r.onload=function(){ED.d.blocks[+blk.dataset.i].src=r.result;markDirty();redraw()};r.readAsDataURL(f)});
+  host.addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;var blk=t.closest('.blk');if(!blk)return;var i=+blk.dataset.i,bs=ED.d.blocks;
+    if(t.hasAttribute('data-mv')){var j=i+(+t.dataset.mv);if(j<0||j>=bs.length)return;var x=bs[i];bs[i]=bs[j];bs[j]=x;markDirty();redraw()}
+    else if(t.hasAttribute('data-rm')){if(confirm('刪除這個積木？')){bs.splice(i,1);markDirty();redraw()}}
+    else if(t.hasAttribute('data-addq')){bs[i].items.push({q:'',a:''});markDirty();redraw()}
+    else if(t.hasAttribute('data-rmq')){bs[i].items.splice(+t.dataset.rmq,1);markDirty();redraw()}});
+  $$('[data-add]',el).forEach(function(b){b.onclick=function(){ED.d.blocks.push(blankBlock(b.dataset.add));markDirty();redraw();var all=$$('.blk',el);if(all.length)all[all.length-1].scrollIntoView({behavior:'smooth',block:'center'})}});
+  function cnt(){var a=$('#cts'),b=$('#ctd');if(a){var n=(ED.d.seoTitle||'').length;a.textContent=n+' 字';a.className='count'+(n>60?' bad':'')}if(b){var m=(ED.d.seoDesc||'').length;b.textContent=m+' 字';b.className='count'+(m>160?' bad':'')}}
+  $$('#meta input,#meta select,#meta textarea',el).forEach(function(i){var f=i.dataset.m;if(!f)return;var fn=function(){ED.d[f]=i.type==='checkbox'?i.checked:i.value;if(f==='h1'||f==='title')updPrev();if(f==='seoTitle'||f==='seoDesc')cnt()};i.addEventListener('input',fn);i.addEventListener('change',fn)});
+  cnt();updPrev();
+  var cov=$('#cover',el);if(cov)cov.onchange=function(){var f=cov.files[0];if(!f)return;if(f.size>1200000){toast('圖片請小於 1.2MB');return}var r=new FileReader();r.onload=function(){ED.d.image=r.result;markDirty();var th=$('#covth');th.style.backgroundImage='url('+r.result+')';th.textContent=''};r.readAsDataURL(f)};
+}
+function addBar(){return '<div class="addbar"><b>加入內容：</b>'+BLOCKS.map(function(x){return '<button class="btn sm ghost" data-add="'+x[0]+'">＋ '+x[1]+'</button>'}).join('')+'</div>'}
+function pathOf(c){return c.type==='article'?'/news/'+(c.slug||'…')+'/':'/'+(c.slug||'…')+'/'}
+
 var NAV=[
  ['工作',[['overview','總覽'],['leads','諮詢單'],['bookings','說明會報名'],['calendar','課程月曆']]],
+ ['頁面與文章',[['pages','所有頁面'],['new','新增頁面／文章'],['publish','發布']]],
  ['官網內容',[['c-home','首頁文字'],['c-courses','證照班資訊'],['c-schedule','開課資訊'],['c-news','最新公告'],['c-faq','常見問題'],['c-photos','網站照片'],['c-seo','搜尋與分享']]],
  ['設定',[['s-contact','聯絡資料'],['s-account','帳號與密碼']]]
 ];
@@ -22,14 +71,15 @@ function login(){
   $('#lf').onsubmit=function(e){e.preventDefault();if($('#pw').value===ST.pw){sessionStorage.setItem('yz_in','1');render()}else $('#err').textContent='密碼不正確'};
 }
 function route(){return (location.hash||'#overview').slice(1)}
+function routeName(){return route().split('/')[0]}
 function go(r){if(dirty&&!confirm('有尚未儲存的修改，確定要離開嗎？'))return;dirty=false;location.hash='#'+r}
 window.addEventListener('hashchange',function(){if(sessionStorage.getItem('yz_in')==='1'){dirty=false;render()}});
 
 function render(){
   if(sessionStorage.getItem('yz_in')!=='1'){login();return}
-  var r=route(),pg=(PAGES[r]||PAGES.overview)();
-  var nav=NAV.map(function(g){return '<div class="grp">'+g[0]+'</div>'+g[1].map(function(n){var badge=n[0]==='leads'&&newLeads()?'<span class="cnt">'+newLeads()+'</span>':'';return '<a class="nv'+(n[0]===r?' on':'')+'" href="#'+n[0]+'">'+n[1]+badge+'</a>'}).join('')}).join('');
-  app.innerHTML='<div class="shell"><aside class="side"><p class="who">'+esc(S.brand)+'</p><p class="sub">後台管理</p><nav>'+nav+'</nav><div class="foot"><a class="btn ghost sm" href="/" target="_blank" rel="noopener">看官網</a><button class="btn ghost sm" id="out">登出</button></div></aside><main><div class="pg"><h1>'+pg.title+'</h1><p class="lead">'+(pg.lead||'')+'</p>'+pg.body+'</div></main>'+(pg.save?'<div class="savebar"><span class="st" id="sbst">沒有修改</span><button class="btn ghost" id="rv">還原</button><button class="btn" id="sv">儲存</button></div>':'')+'</div>';
+  var r=routeName(),arg=route().slice(r.length+1),pg=(PAGES[r]||PAGES.overview)(arg);
+  var nav=NAV.map(function(g){return '<div class="grp">'+g[0]+'</div>'+g[1].map(function(n){var badge=n[0]==='leads'&&newLeads()?'<span class="cnt">'+newLeads()+'</span>':(n[0]==='publish'&&changeCount()?'<span class="cnt">'+changeCount()+'</span>':'');return '<a class="nv'+((n[0]===r||(r==='edit'&&n[0]==='pages'))?' on':'')+'" href="#'+n[0]+'">'+n[1]+badge+'</a>'}).join('')}).join('');
+  app.innerHTML='<div class="shell"><aside class="side"><p class="who">'+esc(S.brand)+'</p><p class="sub">後台管理</p><nav>'+nav+'</nav><div class="foot"><a class="btn ghost sm" href="/" target="_blank" rel="noopener">看官網</a><button class="btn ghost sm" id="out">登出</button></div></aside><main><div class="pg"><h1>'+pg.title+'</h1><p class="lead">'+(pg.lead||'')+'</p>'+pg.body+'</div></main>'+(pg.save?'<div class="savebar"><span class="st" id="sbst">沒有修改</span><button class="btn ghost" id="rv">還原</button><button class="btn" id="sv">'+(pg.saveLabel||'儲存')+'</button></div>':'')+'</div>';
   $('#out').onclick=function(){sessionStorage.removeItem('yz_in');render()};
   dirty=false;
   if(pg.bind)pg.bind($('main'));
@@ -38,7 +88,7 @@ function render(){
     $('main').addEventListener('input',function(){dirty=true;st.className='st dirty';st.textContent='有尚未儲存的修改'});
     $('main').addEventListener('change',function(){dirty=true;st.className='st dirty';st.textContent='有尚未儲存的修改'});
     $('#rv').onclick=function(){dirty=false;render()};
-    $('#sv').onclick=function(){pg.save($('main'));dirty=false;st.className='st ok';st.textContent='已儲存 '+new Date().toTimeString().slice(0,5);toast('已儲存')};
+    $('#sv').onclick=function(){try{pg.save($('main'))}catch(e){return}dirty=false;st.className='st ok';st.textContent='已儲存 '+new Date().toTimeString().slice(0,5);toast('已儲存')};
   }
 }
 function field(id,label,val,opt){opt=opt||{};var v=esc(val);return '<label>'+label+(opt.rows?'<textarea id="'+id+'" rows="'+opt.rows+'">'+v+'</textarea>':'<input id="'+id+'" value="'+v+'"'+(opt.type?' type="'+opt.type+'"':'')+'>')+(opt.hint?'<small>'+opt.hint+'</small>':'')+'</label>'}
@@ -132,5 +182,59 @@ var PAGES={
   return {title:'帳號與密碼',lead:'',body:'<div class="card"><h2>修改密碼</h2><p class="hint">至少 8 碼。</p>'+field('np','新密碼','',{type:'password'})+'<button class="btn" id="sp">更新密碼</button></div><div class="card"><h2>示範資料</h2><p class="hint">清除示範用的場次、諮詢單與官網內容，回到初始狀態。</p><button class="btn danger" id="rs">重設所有示範資料</button></div>',bind:function(){$('#sp').onclick=function(){var v=$('#np').value;if(v.length<8){toast('密碼至少 8 碼');return}ST.pw=v;set('yz_admin',ST);$('#np').value='';toast('密碼已更新')};$('#rs').onclick=function(){if(confirm('會清除示範用的場次、諮詢單與官網內容，確定？')){['yz_admin','yz_content','yz_leads','yz_news','yz_bookings','yz_sched'].forEach(function(k){localStorage.removeItem(k)});ST=YZ.admin(S.courses);toast('已重設');render()}}}};
  }
 };
-render();
+PAGES.pages=function(){
+  var g=PG(),rows=[];
+  (PD||[]).forEach(function(p){var o=g.pages[p.key];rows.push({key:p.key,title:(o&&o.h1)||p.h1,path:p.path,kind:p.kind,state:o?'已修改':'',custom:false})});
+  g.custom.forEach(function(c){rows.push({key:'c:'+c.id,title:c.title||'（未命名）',path:pathOf(c),kind:c.type==='article'?'新增文章':'新增頁面',state:c.status==='published'?'已發布':'草稿',custom:true})});
+  var body='<div class="card"><div class="row" style="margin-bottom:12px"><input id="q" placeholder="搜尋標題或網址" style="max-width:340px"><a class="btn" href="#new">＋ 新增頁面／文章</a></div>'+
+   '<div class="chips" id="flt">'+[['all','全部'],['mod','已修改'],['new','新增']].map(function(x,i){return '<button class="chip'+(i===0?' on':'')+'" data-f="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>'+
+   '<table class="tbl" id="ptb"><tr><th>標題</th><th>網址</th><th>類型</th><th>狀態</th><th></th></tr>'+rows.map(function(r){return '<tr data-s="'+esc((r.title+' '+r.path).toLowerCase())+'" data-m="'+(r.state==='已修改'?1:0)+'" data-n="'+(r.custom?1:0)+'"><td>'+esc(r.title)+'</td><td class="nw"><small>'+esc(r.path)+'</small></td><td class="nw">'+esc(r.kind)+'</td><td class="nw">'+(r.state?'<span class="tag'+(r.state==='草稿'?'':' done')+'">'+r.state+'</span>':'')+'</td><td class="nw"><a class="btn sm ghost" href="#edit/'+esc(r.key)+'">編輯</a></td></tr>'}).join('')+'</table></div>';
+  return {title:'所有頁面',lead:'修改既有頁面的內文，或新增頁面與文章。改完要到「發布」才會上線。',body:body,bind:function(el){var q=$('#q',el),f='all';function ap(){var t=q.value.toLowerCase();$$('#ptb tr[data-s]',el).forEach(function(tr){var ok=tr.dataset.s.indexOf(t)>=0&&(f==='all'||(f==='mod'&&tr.dataset.m==='1')||(f==='new'&&tr.dataset.n==='1'));tr.hidden=!ok})}q.oninput=ap;$$('#flt .chip',el).forEach(function(b){b.onclick=function(){f=b.dataset.f;$$('#flt .chip',el).forEach(function(x){x.classList.toggle('on',x===b)});ap()}})}};
+};
+PAGES.new=function(){
+  return {title:'新增頁面／文章',lead:'選一種模板開始。內容用積木組成，版面由系統統一，不會被改亂。',body:'<div class="stats"><a class="stat" href="#" data-t="page"><b style="font-size:22px">一般頁面</b><span>例如企業內訓、活動介紹。可選擇加入左側選單。</span></a><a class="stat" href="#" data-t="article"><b style="font-size:22px">文章</b><span>會出現在「最新消息」列表，有發佈日期與文章結構化資料。</span></a></div>',bind:function(el){$$('[data-t]',el).forEach(function(a){a.onclick=function(e){e.preventDefault();ED={key:'new',custom:true,d:{id:'',type:a.dataset.t,slug:'',title:'',seoTitle:'',seoDesc:'',date:new Date().toISOString().slice(0,10),image:'',menu:false,navLabel:'',status:'draft',blocks:[{type:'h2',text:''},{type:'p',text:''}]}};location.hash='#edit/new'}})}};
+};
+PAGES.edit=function(key){
+  var g=PG();
+  if(key==='new'){if(!ED||ED.key!=='new')return {title:'新增',lead:'',body:'<p class="empty">請從「新增頁面／文章」選擇模板。</p>'}}
+  else if(!ED||ED.key!==key){
+    if(key.indexOf('c:')===0){var c=g.custom.filter(function(x){return 'c:'+x.id===key})[0];if(!c)return {title:'找不到頁面',lead:'',body:'<p class="empty">這個頁面不存在。</p>'};ED={key:key,custom:true,d:JSON.parse(JSON.stringify(c))}}
+    else{var base=(PD||[]).filter(function(p){return p.key===key})[0];if(!base)return {title:'找不到頁面',lead:'',body:'<p class="empty">這個頁面不存在。</p>'};var o=g.pages[key];ED={key:key,custom:false,base:base,d:{h1:(o&&o.h1)||base.h1,seoTitle:(o&&o.seoTitle)||'',seoDesc:(o&&o.seoDesc)||'',blocks:JSON.parse(JSON.stringify((o&&o.blocks)||base.blocks))}}}
+  }
+  var d=ED.d,cu=ED.custom;
+  var meta=cu?'<div class="grid2"><label>類型<select data-m="type"><option value="page"'+(d.type==='page'?' selected':'')+'>一般頁面</option><option value="article"'+(d.type==='article'?' selected':'')+'>文章</option></select></label><label>網址代稱<input data-m="slug" value="'+esc(d.slug)+'" placeholder="例如 corporate-training"><small>只能用小寫英文、數字與連字號。網址：<span id="purl">'+esc(pathOf(d))+'</span></small></label></div><label>頁面標題<input data-m="title" value="'+esc(d.title)+'"></label><div class="grid2"><label>發佈日期（文章用）<input type="date" data-m="date" value="'+esc(d.date||'')+'"></label><label>狀態<select data-m="status"><option value="draft"'+(d.status!=='published'?' selected':'')+'>草稿（不發布）</option><option value="published"'+(d.status==='published'?' selected':'')+'>發布</option></select></label></div><div class="grid2"><label style="display:flex;flex-direction:row;align-items:center;gap:8px"><input type="checkbox" data-m="menu" '+(d.menu?'checked':'')+' style="width:auto;min-height:0"> 加入左側選單（一般頁面）</label><label>選單名稱<input data-m="navLabel" value="'+esc(d.navLabel||'')+'" placeholder="12 字內"></label></div><div class="photo"><div class="thumb" id="covth" style="'+(d.image?'background-image:url('+esc(d.image)+')':'')+'">'+(d.image?'':'封面圖（選填）')+'</div><div><input type="file" accept="image/*" id="cover"><small class="hint">會顯示在頁面標題下方。</small></div></div>'
+   :'<label>頁面標題<input data-m="h1" value="'+esc(d.h1)+'"></label>';
+  var seo='<label>搜尋標題 <small>留白使用預設</small><input data-m="seoTitle" value="'+esc(d.seoTitle||'')+'"><small><span class="count" id="cts"></span>　建議 30 字內</small></label><label>搜尋描述 <small>留白使用內文開頭</small><textarea data-m="seoDesc" rows="2">'+esc(d.seoDesc||'')+'</textarea><small><span class="count" id="ctd"></span>　建議 80～120 字</small></label>';
+  var body='<div class="editor"><div><div class="card" id="meta"><h2>'+(cu?'頁面設定':'標題與搜尋')+'</h2>'+meta+seo+'</div><div class="card"><h2>內容</h2><p class="hint">用積木編輯內文，可以上下移動、刪除或新增。</p><div id="bl">'+blocksPanel()+'</div>'+addBar()+'</div>'+(!cu&&g.pages[key]?'<div class="card"><button class="btn danger" id="revert">還原為原站內容</button></div>':'')+'</div><div class="prevwrap"><div class="card"><h2>預覽</h2><p class="hint">與正式網站相同的樣式。</p><iframe id="prev" title="預覽"></iframe></div></div></div>';
+  return {title:cu?(d.title||'新增頁面'):d.h1,lead:cu?'新增的頁面要把狀態改成「發布」，再到「發布」頁送出後才會上線。':'修改後按「儲存草稿」，再到「發布」送出。',body:body,saveLabel:'儲存草稿',
+   bind:function(el){editorBind(el);var rv=$('#revert',el);if(rv)rv.onclick=function(){if(!confirm('還原成原站內容？你的修改會被丟棄。'))return;var g2=PG();delete g2.pages[key];PGset(g2);ED=null;dirty=false;location.hash='#pages'};
+    function pu(){var u=$('#purl');if(u)u.textContent=pathOf(ED.d)}var sl=$('[data-m=slug]',el);if(sl)sl.addEventListener('input',pu);var ty=$('[data-m=type]',el);if(ty)ty.addEventListener('change',pu)},
+   save:function(){var g2=PG(),dd=ED.d;
+    if(ED.custom){
+      var slug=(dd.slug||'').trim();
+      if(!YZB.SLUG.test(slug)){toast('網址代稱只能用小寫英文、數字與連字號');throw new Error('slug')}
+      if(dd.type==='page'&&RESERVED.indexOf(slug)>=0){toast('這個網址代稱是系統保留字，請換一個');throw new Error('slug')}
+      if(g2.custom.some(function(c){return c.id!==dd.id&&c.slug===slug&&c.type===dd.type})){toast('已經有相同網址的頁面');throw new Error('slug')}
+      if(!(dd.title||'').trim()){toast('請輸入頁面標題');throw new Error('title')}
+      dd.slug=slug;if(!dd.id)dd.id='p'+Date.now().toString(36);
+      var ix=g2.custom.map(function(c){return c.id}).indexOf(dd.id);var cp=JSON.parse(JSON.stringify(dd));if(ix>=0)g2.custom[ix]=cp;else g2.custom.push(cp);
+      PGset(g2);if(ED.key==='new'){var nk='c:'+dd.id;ED.key=nk;setTimeout(function(){dirty=false;location.hash='#edit/'+nk},0)}
+    }else{
+      var same=JSON.stringify(dd.blocks)===JSON.stringify(ED.base.blocks)&&dd.h1===ED.base.h1&&!(dd.seoTitle||'').trim()&&!(dd.seoDesc||'').trim();
+      if(same)delete g2.pages[ED.key];else g2.pages[ED.key]={h1:dd.h1,seoTitle:dd.seoTitle||'',seoDesc:dd.seoDesc||'',blocks:dd.blocks};
+      PGset(g2);
+    }}};
+};
+PAGES.publish=function(){
+  var g=PG(),b=PUB(),n=changeCount();
+  var mod=Object.keys(g.pages).map(function(k){var p=(PD||[]).filter(function(x){return x.key===k})[0];return {t:p?p.h1:k,u:p?p.path:'/'+k+'/',s:JSON.stringify(g.pages[k])!==JSON.stringify(b.pages[k])?'待發布':'已發布'}});
+  var cus=g.custom.map(function(c){var bc=b.custom.filter(function(x){return x.id===c.id})[0];return {t:c.title||'（未命名）',u:pathOf(c),s:c.status!=='published'?'草稿（不會上線）':(JSON.stringify(c)!==JSON.stringify(bc)?'待發布':'已發布')}});
+  var rows=mod.concat(cus);
+  var body='<div class="card"><h2>待發布的內容</h2><p class="hint">共 <b>'+n+'</b> 項變更尚未發布。</p>'+(rows.length?'<table class="tbl"><tr><th>頁面</th><th>網址</th><th>狀態</th></tr>'+rows.map(function(r){return '<tr><td>'+esc(r.t)+'</td><td><small>'+esc(r.u)+'</small></td><td class="nw"><span class="tag'+(r.s==='已發布'?' done':'')+'">'+esc(r.s)+'</span></td></tr>'}).join('')+'</table>':'<p class="empty">目前沒有修改。到「所有頁面」編輯或新增。</p>')+'</div>'+
+   '<div class="card"><h2>發布</h2><p class="hint"><b>正式版</b>：按下「發布」後，系統自動重新建置網站，約 1～2 分鐘後上線，內容會直接寫進網頁，搜尋引擎與 AI 爬蟲看得到。<br><b>示範版</b>：會下載一份 <code>overrides.json</code> 發布檔；把它放到專案的 <code>src/content/</code> 後執行 <code>node build.mjs</code> 即可產生實際網頁。</p><div class="row"><button class="btn" id="pub"'+(n?'':' disabled')+'>發布</button><button class="btn danger" id="dis"'+(n?'':' disabled')+'>放棄所有未發布修改</button></div></div>';
+  return {title:'發布',lead:'送出修改，讓客戶改的內容上線。',body:body,bind:function(el){
+   $('#pub',el).onclick=function(){var out={pages:g.pages,custom:g.custom};var blob=new Blob([JSON.stringify(out)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='overrides.json';document.body.appendChild(a);a.click();a.remove();set('yz_pub',JSON.parse(JSON.stringify(out)));toast('已產生發布檔');render()};
+   $('#dis',el).onclick=function(){if(!confirm('放棄所有尚未發布的修改？'))return;var p=PUB();PGset({pages:JSON.parse(JSON.stringify(p.pages)),custom:JSON.parse(JSON.stringify(p.custom))});ED=null;toast('已還原到上次發布');render()}}};
+};
+fetch('/admin/pages.json').then(function(r){return r.json()}).then(function(d){PD=d}).catch(function(){PD=[]}).then(render);
 })();

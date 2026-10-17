@@ -64,3 +64,10 @@ details.acc>div{padding:4px 18px 8px}
 input,select,textarea{font-weight:400}.grid2,.grid4{align-items:start}
 
 label>small{display:block;margin-top:-2px}
+/* 頁面編輯器 */
+.editor{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}.prevwrap{position:sticky;top:12px}
+#prev{width:100%;height:70vh;min-height:420px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.blk{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 12px;background:var(--bg2)}.bh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.bh b{color:var(--blue-d)}.bc{display:flex;gap:6px}
+.addbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px dashed var(--line);padding-top:14px;margin-top:6px}.hint{color:var(--mute);font-size:14px;display:block;margin-top:4px}
+code{background:var(--blue-l);padding:1px 6px;border-radius:5px;font-size:14px}
+@media(max-width:1100px){.editor{grid-template-columns:1fr}.prevwrap{position:static}#prev{height:60vh}}

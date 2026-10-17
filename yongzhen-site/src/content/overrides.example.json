@@ -1,0 +1,17 @@
+{
+  "pages": {
+    "courses/nlp": {
+      "h1": "（選填）改頁面標題",
+      "seoTitle": "（選填）搜尋標題",
+      "seoDesc": "（選填）搜尋描述",
+      "blocks": [{ "type": "h2", "text": "有填 blocks 就會取代這一頁原本的內文" }, { "type": "p", "text": "段落支援 **粗體** 與 [連結](/contact/)。" }]
+    }
+  },
+  "custom": [
+    {
+      "id": "p1", "type": "page", "slug": "corporate-training", "title": "企業內訓與團體課程", "menu": true, "navLabel": "企業內訓",
+      "status": "published", "seoTitle": "", "seoDesc": "", "date": "", "image": "",
+      "blocks": [{ "type": "h2", "text": "適合哪些團隊" }, { "type": "ul", "items": ["主管與管理者", "客服與業務"] }, { "type": "faq", "items": [{ "q": "可以到企業現場上課嗎？", "a": "可以，請來電洽詢。" }] }, { "type": "cta", "text": "想為團隊規劃課程？" }]
+    }
+  ]
+}

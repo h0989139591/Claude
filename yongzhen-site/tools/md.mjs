@@ -103,3 +103,62 @@ export function parseFaq(md, opts) {
   flush();
   return items;
 }
+
+// ---------- 原站正文 → 內容積木（後台編輯器載入既有頁面用）----------
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rarr: '→', larr: '←', times: '×', radic: '√', reg: '®', copy: '©', hellip: '…', middot: '·', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', ndash: '–', mdash: '—', bull: '•' };
+export const decodeEntities = s => s.replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (m, d) => d === '8203' ? '' : String.fromCodePoint(+d)).replace(/&([a-z]+);/gi, (m, n) => NAMED[n.toLowerCase()] ?? m);
+
+export function convertBlocks(md, opts) {
+  const lines = md.replace(/\r/g, '').split('\n');
+  let i = lines.findIndex(l => /^H2:/.test(l)) + 1;
+  { let j = i; while (j < lines.length && !lines[j].trim()) j++;
+    if (/^# \S/.test(lines[j] || '')) { for (let k = j + 1; k < Math.min(j + 6, lines.length); k++) if (/ico_1\.gif/.test(lines[k])) { i = j + 1; break; } } }
+  const blocks = []; let list = null, para = [], note = null, noteLines = [];
+  const text = s => {
+    s = s.replace(/\[圖:[^\]]*\]/g, '');
+    s = s.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (m, t, u) => {
+      t = decodeEntities(t).trim(); if (!t) return '';
+      const to = opts.links(u); if (to === null) return /^https?:\/\//i.test(t) ? '' : t;
+      if (/^https?:\/\//i.test(t)) { let host = ''; try { host = new URL(to, 'http://x').host; } catch {} t = (opts.linkLabel && opts.linkLabel(to)) || (host && host !== 'x' ? host : '連結'); }
+      return `[${t}](${to})`;
+    });
+    return decodeEntities(s).replace(/\s+/g, ' ').trim();
+  };
+  const drop = l => (opts.drop || []).some(r => r.test(l));
+  const flushList = () => { if (list) { if (note) noteLines.push(...list.map(x => '・' + x)); else blocks.push({ type: 'ul', items: list }); list = null; } };
+  const flushPara = () => { if (para.length) { if (note) noteLines.push(para.join(' ')); else blocks.push({ type: 'p', text: para.join('\n') }); para = []; } };
+  const closeNote = () => { if (note) { note.text = noteLines.join('\n'); blocks.push(note); note = null; noteLines = []; } };
+  for (; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l || l === '[' || l === ']') { flushPara(); continue; }
+    if (/^\[圖:images\/ico_1\.gif\]/.test(l) || /^首頁\s*>|^\[首頁\]\(index\.html\)\s*>/.test(l)) continue;
+    if (drop(l)) continue;
+    const im = l.match(/^\[圖:([^\]]+)\]$/);
+    if (im) {
+      flushPara(); flushList(); closeNote();
+      const base = decodeURIComponent(im[1].split('?')[0].split('/').pop()), p = opts.images.get(base);
+      if (p) blocks.push({ type: 'img', src: '/' + p.replace(/^public\//, ''), alt: opts.alt || '' });
+      continue;
+    }
+    if (/^\]\(/.test(l)) continue;
+    if (/^[*＊_=~\-]{4,}$/.test(l)) { flushPara(); continue; }
+    const hm = l.match(/^(#{1,4})\s*(.*)$/);
+    if (hm) {
+      flushPara(); flushList(); closeNote();
+      let t = hm[2].trim();
+      if (!t) { let j = i + 1; while (j < lines.length && !lines[j].trim()) j++; t = (lines[j] || '').trim(); i = j; }
+      t = text(t); if (!t) continue;
+      const day = /^第[一二三四五六七八九十]+天/.test(t);
+      if (!day && /重要說明|提醒事項|注意事項/.test(t)) { note = { type: 'note', title: t, text: '' }; noteLines = []; continue; }
+      blocks.push({ type: day || hm[1].length >= 3 ? 'h3' : 'h2', text: t, ...(day ? { day: true } : {}) });
+      continue;
+    }
+    const lm = l.match(/^[-●•]\s*(.*)$/);
+    if (lm) { flushPara(); const t = text(lm[1]); if (t) (list ||= []).push(t); continue; }
+    flushList();
+    const t = text(l); if (!t) continue;
+    para.push(t);
+  }
+  flushPara(); flushList(); closeNote();
+  return blocks;
+}

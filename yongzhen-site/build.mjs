@@ -1,9 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { convert, parseFaq, indexImages, esc } from './tools/md.mjs';
+import { createRequire } from 'node:module';
+import { convert, convertBlocks, parseFaq, indexImages, imgSize, esc } from './tools/md.mjs';
+const Y = createRequire(import.meta.url)('./src/blocks.js');
 
 const S = JSON.parse(fs.readFileSync('src/site.json', 'utf8'));
 const OUT = 'dist';
+// 後台「發布檔」：既有頁面的內文覆蓋與新增頁面／文章。正式版由 CONTENT_URL（Google Apps Script）提供；示範版讀 src/content/overrides.json
+let OV = { pages: {}, custom: [] };
+try {
+  let j = null;
+  if (process.env.CONTENT_URL) { const res = await fetch(process.env.CONTENT_URL); if (res.ok) j = await res.json(); else console.warn('CONTENT_URL 讀取失敗：', res.status); }
+  else if (fs.existsSync('src/content/overrides.json')) j = JSON.parse(fs.readFileSync('src/content/overrides.json', 'utf8'));
+  if (j) OV = { pages: j.pages || {}, custom: Array.isArray(j.custom) ? j.custom : [] };
+} catch (e) { console.warn('發布檔讀取失敗，改用預設內容：', e.message); }
+const RESERVED = new Set(['admin', 'img', 'news', 'courses', 'articles', 'schedule', 'faq', 'about', 'booking', 'contact', 'privacy', 'terms', 'teachers', 'stories', 'partners', 'media', 'videos', 'knowledge', 'classroom', 'uploads', 'api', 'style', 'app']);
+const CUSTOM = OV.custom.filter(c => c && c.status === 'published' && typeof c.slug === 'string' && Y.SLUG.test(c.slug) && typeof c.title === 'string' && c.title.trim() && (c.type === 'article' || (c.type === 'page' && !RESERVED.has(c.slug))));
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 if (fs.existsSync('public')) fs.cpSync('public', OUT, { recursive: true });
@@ -57,7 +69,10 @@ const THIN = new Set(Object.keys(NEWS_META).filter(thin));
 const NEWS = Object.entries(NEWS_META).filter(([id]) => !THIN.has(id)).map(([id, m]) => ({ id, ...m, src: `news_details_${id}.html.md` })).sort((a, b) => (b.date || '0') < (a.date || '0') ? -1 : 1);
 for (const n of NEWS) MAP.set(`news_details_${n.id}.html`, `/news/${n.id}/`);
 for (const id of THIN) MAP.set(`news_details_${id}.html`, '/news/');
-S.news = NEWS.map(n => ({ id: 'n' + n.id, date: n.date, title: n.title, href: `/news/${n.id}/` }));
+const todayIsoB = new Date().toISOString().slice(0, 10);
+const CART = CUSTOM.filter(c => c.type === 'article' && !NEWS_META[c.slug]).map(c => ({ id: c.slug, date: c.date || todayIsoB, title: c.title }));
+const NEWS_ALL = [...NEWS, ...CART].sort((a, b) => (b.date || '0') < (a.date || '0') ? -1 : 1);
+S.news = NEWS_ALL.map(n => ({ id: 'n' + n.id, date: n.date, title: n.title, href: `/news/${n.id}/` }));
 const newsIds = new Set(NEWS.map(n => n.id));
 function mapLink(u) {
   if (/^(tel:|mailto:|#)/.test(u)) return u;
@@ -75,6 +90,16 @@ for (const p of S.pages) LABELS.set(`/${p.slug}/`, p.h1);
 for (const f of S.faqPages) LABELS.set(`/${f.slug}/`, f.h1);
 for (const c of S.categories) LABELS.set(`/articles/${c.slug}/`, c.name);
 const linkLabel = to => LABELS.get(to.replace(/#.*$/, ''));
+const RENDER_OPTS = { cta: t => cta(t || '想進一步了解？'), imgSize: src => src.startsWith('/img/') ? imgSize('public' + src) : null };
+const EDITABLE = [];
+function applyOv(key, base, kind, path, mdBlocks) {
+  EDITABLE.push({ key, kind, path, h1: base.h1, title: base.title, desc: base.desc, blocks: mdBlocks });
+  const o = OV.pages[key]; if (!o) return { ...base, faq: [] };
+  let html = base.html, faq = [];
+  if (Array.isArray(o.blocks)) { const rr = Y.render(o.blocks, RENDER_OPTS); html = rr.html; faq = rr.faq; }
+  return { html, faq, h1: (o.h1 || '').trim() || base.h1, title: (o.seoTitle || '').trim() || base.title, desc: (o.seoDesc || '').trim() || base.desc };
+}
+const mdBlocks = (src, alt) => convertBlocks(fs.readFileSync(`source/pages/${src}`, 'utf8'), { links: mapLink, linkLabel, images: IMAGES, alt, drop: DROP });
 const conv = (src, alt) => convert(fs.readFileSync(`source/pages/${src}`, 'utf8'), { links: mapLink, linkLabel, images: IMAGES, alt, drop: DROP });
 function prose(html) {
   let n = 0;
@@ -91,6 +116,7 @@ const NAV = [
   ['/', '首頁'],
   ...S.courses.map(c => [`/courses/${c.slug}/`, c.name]),
   ['/schedule/', '最新開課資訊'], ['/booking/', '預約說明會'], ['/teachers/', '授課講師介紹'], ['/courses/', '其他課程'], ['/news/', '最新消息'],
+  ...CUSTOM.filter(c => c.type === 'page' && c.menu).map(c => [`/${c.slug}/`, (c.navLabel || c.title).slice(0, 12)]),
   ['label', '好書佳文分享'], ...S.categories.map(c => [`/articles/${c.slug}/`, c.name]),
   ['/about/', '關於我們'], ['/contact/', '聯絡我們']
 ];
@@ -205,11 +231,12 @@ ${cta('想先了解適不適合？')}
 for (const c of S.courses) {
   const p = `/courses/${c.slug}/`;
   const r = conv(c.src, `${c.name}：課程相關圖片`);
-  const { html, toc } = prose(r.html);
+  const e = applyOv(`courses/${c.slug}`, { html: r.html, h1: c.h1, title: c.title, desc: c.desc }, '證照班', p, mdBlocks(c.src, `${c.name}：課程相關圖片`));
+  const { html, toc } = prose(e.html);
   const facts = c.facts.map(([a, b], i) => `<div class="fact"><dt>${esc(a)}</dt><dd data-k="course.${c.slug}.fact.${i}">${esc(b)}</dd></div>`).join('');
   write(`courses/${c.slug}/index.html`, layout({
-    path: p, title: c.title, desc: c.desc, crumbs: [['/', '首頁'], [null, c.name]],
-    body: `<header class="chero"><div class="ctx"><span class="badge">${esc(c.badge)}</span><h1>${esc(c.h1)}</h1><p class="lead-p">${esc(c.summary)}</p><ul class="chips">${c.chips.map(x => `<li>${esc(x)}</li>`).join('')}</ul><div class="row"><a class="btn primary" href="${S.phoneHref}">${icon('phone')}電話諮詢</a><a class="btn ghost" href="${S.lineUrl}" data-line>${icon('chat')}官方帳號</a><a class="btn ghost" href="/booking/">${icon('calendar')}預約說明會</a></div></div><div class="cim"><img class="zoomable" data-photo="course.${c.slug}" src="${c.img}" alt="${esc(c.imgAlt)}" width="960" height="540"></div></header>
+    path: p, title: e.title, desc: e.desc, crumbs: [['/', '首頁'], [null, c.name]],
+    body: `<header class="chero"><div class="ctx"><span class="badge">${esc(c.badge)}</span><h1>${esc(e.h1)}</h1><p class="lead-p">${esc(c.summary)}</p><ul class="chips">${c.chips.map(x => `<li>${esc(x)}</li>`).join('')}</ul><div class="row"><a class="btn primary" href="${S.phoneHref}">${icon('phone')}電話諮詢</a><a class="btn ghost" href="${S.lineUrl}" data-line>${icon('chat')}官方帳號</a><a class="btn ghost" href="/booking/">${icon('calendar')}預約說明會</a></div></div><div class="cim"><img class="zoomable" data-photo="course.${c.slug}" src="${c.img}" alt="${esc(c.imgAlt)}" width="960" height="540"></div></header>
 <dl class="facts">${facts}</dl>
 ${toc.length > 2 ? `<nav class="toc" aria-label="本頁目錄"><b>本頁目錄</b>${toc.slice(0, 12).map(([id, t]) => `<a href="#${id}">${esc(t.length > 20 ? t.slice(0, 20) + '…' : t)}</a>`).join('')}</nav>` : ''}
 <div class="prose">${html}</div>
@@ -273,16 +300,17 @@ const parentOf = p => p.group === 'schedule' ? ['/schedule/', '最新開課資�
 for (const pg of S.pages) {
   const p = `/${pg.slug}/`;
   const r = conv(pg.src, `${pg.h1}：相關圖片`);
-  const { html, toc } = prose(r.html);
+  const e = applyOv(pg.slug, { html: r.html, h1: pg.h1, title: pg.title, desc: pg.desc }, pg.group === 'more' ? '課程頁' : pg.group === 'schedule' ? '開課頁' : '資訊頁', p, mdBlocks(pg.src, `${pg.h1}：相關圖片`));
+  const { html, toc } = prose(e.html);
   const par = parentOf(pg);
-  const crumbs = [['/', '首頁'], ...(par ? [par] : []), [null, pg.h1.length > 24 ? pg.h1.slice(0, 24) + '…' : pg.h1]];
+  const crumbs = [['/', '首頁'], ...(par ? [par] : []), [null, e.h1.length > 24 ? e.h1.slice(0, 24) + '…' : e.h1]];
   const cur = pg.group === 'schedule' ? '/schedule/' : pg.group === 'more' ? '/courses/' : pg.slug.startsWith('about') ? '/about/' : '';
   write(`${pg.slug}/index.html`, layout({
-    path: p, cur, title: pg.title, desc: pg.desc, crumbs,
-    body: `<header class="phead"><span class="badge">${icon(pg.icon)}${esc(par ? par[1] : '永真樂活')}</span><h1>${esc(pg.h1)}</h1></header>
+    path: p, cur, title: e.title, desc: e.desc, crumbs,
+    body: `<header class="phead"><span class="badge">${icon(pg.icon)}${esc(par ? par[1] : '永真樂活')}</span><h1>${esc(e.h1)}</h1></header>
 ${toc.length > 3 ? `<nav class="toc" aria-label="本頁目錄"><b>本頁目錄</b>${toc.slice(0, 10).map(([id, t]) => `<a href="#${id}">${esc(t.length > 20 ? t.slice(0, 20) + '…' : t)}</a>`).join('')}</nav>` : ''}
 <div class="prose">${html}</div>${cta()}`,
-    ld: [pg.group === 'more'
+    ld: [...(e.faq.length ? [faqLd(e.faq)] : []), pg.group === 'more'
       ? { '@context': 'https://schema.org', '@type': 'Course', name: pg.h1, description: pg.desc, provider: { '@type': 'Organization', name: S.brandFull, url: S.siteUrl }, inLanguage: 'zh-TW' }
       : { '@context': 'https://schema.org', '@type': pg.slug === 'about' ? 'AboutPage' : 'WebPage', name: pg.h1, description: pg.desc, url: abs(p), isPartOf: { '@id': abs('/#org') } }]
   }));
@@ -303,10 +331,11 @@ for (const f of S.faqPages) {
 for (const c of S.categories) {
   const p = `/articles/${c.slug}/`;
   const r = conv(c.src, `${c.name}：文章配圖`);
-  const { html, toc } = prose(r.html);
+  const e = applyOv(`articles/${c.slug}`, { html: r.html, h1: c.name, title: `${c.name}｜好書佳文分享｜${S.brand}`, desc: c.desc.length >= 30 ? c.desc : `${c.desc}（${S.assoc}好書佳文分享）` }, '好書佳文', p, mdBlocks(c.src, `${c.name}：文章配圖`));
+  const { html, toc } = prose(e.html);
   write(`articles/${c.slug}/index.html`, layout({
-    path: p, title: `${c.name}｜好書佳文分享｜${S.brand}`, desc: c.desc.length >= 30 ? c.desc : `${c.desc}（${S.assoc}好書佳文分享）`, crumbs: [['/', '首頁'], ['/articles/', '好書佳文分享'], [null, c.name]],
-    body: `<header class="phead"><span class="badge">${icon('book')}好書佳文分享</span><h1>${esc(c.name)}</h1></header>${toc.length > 3 ? `<nav class="toc" aria-label="本頁目錄"><b>本頁目錄</b>${toc.slice(0, 10).map(([id, t]) => `<a href="#${id}">${esc(t.length > 20 ? t.slice(0, 20) + '…' : t)}</a>`).join('')}</nav>` : ''}<div class="prose">${html}</div>${cta('喜歡這些文章？')}`,
+    path: p, title: e.title, desc: e.desc, crumbs: [['/', '首頁'], ['/articles/', '好書佳文分享'], [null, c.name]],
+    body: `<header class="phead"><span class="badge">${icon('book')}好書佳文分享</span><h1>${esc(e.h1)}</h1></header>${toc.length > 3 ? `<nav class="toc" aria-label="本頁目錄"><b>本頁目錄</b>${toc.slice(0, 10).map(([id, t]) => `<a href="#${id}">${esc(t.length > 20 ? t.slice(0, 20) + '…' : t)}</a>`).join('')}</nav>` : ''}<div class="prose">${html}</div>${cta('喜歡這些文章？')}`,
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: c.name, description: c.desc, author: { '@type': 'Organization', name: S.brandFull }, publisher: { '@id': abs('/#org') }, image: abs(S.ogImage), mainEntityOfPage: abs(p), inLanguage: 'zh-TW' }]
   }));
 }
@@ -338,13 +367,14 @@ for (const n of NEWS) {
   const hi = body.findIndex(l => /^#\s*\S/.test(l)); let h1 = '';
   if (hi >= 0 && hi < 6) { h1 = body[hi].replace(/^#\s*/, '').trim(); body.splice(hi, 1); }
   const r = convert('H2:\n\n' + body.join('\n'), { links: mapLink, linkLabel, images: IMAGES, alt: `${h1 || n.title}：文章配圖`, drop: DROP });
-  const { html, toc } = prose(r.html);
-  const title1 = h1 || n.title;
-  n.h1 = title1; n.html = html; n.toc = toc; n.text = r.text; n.img = r.images[0];
-  n.desc = plainDesc(html, `${fit(title1, 40)}：${S.assoc}最新消息，選課指南與國際證照解析。`);
-  const p = `/news/${n.id}/`;
+  const t1 = h1 || n.title, p = `/news/${n.id}/`;
+  const d1 = plainDesc(r.html, `${fit(t1, 40)}：${S.assoc}最新消息，選課指南與國際證照解析。`);
+  const e = applyOv(`news/${n.id}`, { html: r.html, h1: t1, title: `${fit(t1, 46)}｜最新消息｜${S.brand}`, desc: d1 }, '最新消息', p, convertBlocks('H2:\n\n' + body.join('\n'), { links: mapLink, linkLabel, images: IMAGES, alt: `${t1}：文章配圖`, drop: DROP }));
+  const { html, toc } = prose(e.html);
+  const title1 = e.h1;
+  n.h1 = title1; n.html = html; n.toc = toc; n.text = r.text; n.img = r.images[0]; n.desc = e.desc;
   write(`news/${n.id}/index.html`, layout({
-    path: p, cur: '/news/', title: `${fit(title1, 46)}｜最新消息｜${S.brand}`, desc: n.desc, crumbs: [['/', '首頁'], ['/news/', '最新消息'], [null, fit(title1, 22)]],
+    path: p, cur: '/news/', title: e.title, desc: e.desc, crumbs: [['/', '首頁'], ['/news/', '最新消息'], [null, fit(title1, 22)]],
     body: `<article><header class="phead">${n.date ? `<time datetime="${n.date}">${n.date}</time>` : ''}<h1>${esc(title1)}</h1>${n.title !== title1 ? `<p>${esc(n.title)}</p>` : ''}</header>
 ${toc.length > 3 ? `<nav class="toc" aria-label="本文目錄"><b>本文目錄</b>${toc.slice(0, 10).map(([id, t]) => `<a href="#${id}">${esc(fit(t, 20))}</a>`).join('')}</nav>` : ''}<div class="prose">${html}</div></article>${cta('想進一步了解？')}`,
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: fit(title1, 110), description: n.desc, ...(n.date ? { datePublished: n.date, dateModified: n.date } : {}), author: { '@type': 'Organization', name: S.brandFull }, publisher: { '@id': abs('/#org') }, image: abs(n.img || S.ogImage), mainEntityOfPage: abs(p), inLanguage: 'zh-TW' }]
@@ -352,8 +382,24 @@ ${toc.length > 3 ? `<nav class="toc" aria-label="本文目錄"><b>本文目錄</
 }
 write('news/index.html', layout({
   path: '/news/', title: `最新消息｜選課指南與國際證照解析｜${S.brand}`, desc: `${S.assoc}最新消息：選課指南、國際證照解析、第二專長與身心整合學習文章，以及開課公告與說明會資訊。`, crumbs: [['/', '首頁'], [null, '最新消息']],
-  body: `<header class="phead"><h1>最新消息</h1><p>選課指南、證照解析、說明會與開課公告，共 ${NEWS.length} 篇。</p></header><div id="newsList" data-news="all">${NEWS.map(n => `<article class="news-item" id="n${n.id}"><time datetime="${n.date}">${n.date || '　'}</time><h2><a href="/news/${n.id}/">${esc(n.title)}</a></h2></article>`).join('')}</div>`
+  body: `<header class="phead"><h1>最新消息</h1><p>選課指南、證照解析、說明會與開課公告，共 ${NEWS_ALL.length} 篇。</p></header><div id="newsList" data-news="all">${NEWS_ALL.map(n => `<article class="news-item" id="n${n.id}"><time datetime="${n.date}">${n.date || '　'}</time><h2><a href="/news/${n.id}/">${esc(n.title)}</a></h2></article>`).join('')}</div>`
 }));
+
+// ---------- 後台新增的頁面與文章（發布檔 custom）----------
+for (const c of CUSTOM) {
+  const isArt = c.type === 'article', p = isArt ? `/news/${c.slug}/` : `/${c.slug}/`;
+  if (pagesIndex.includes(p) || (isArt && NEWS_META[c.slug])) { console.warn('自訂頁網址重複，略過：', p); continue; }
+  const rr = Y.render(c.blocks || [], RENDER_OPTS), { html, toc } = prose(rr.html);
+  let desc = (c.seoDesc || '').trim() || Y.firstText(c.blocks, 110) || c.title; if (desc.length < 30) desc = `${desc}｜${S.brandFull}・${S.assoc}`;
+  const title = (c.seoTitle || '').trim() || `${fit(c.title, 40)}｜${S.brand}`;
+  const hero = c.image && Y.okImg(c.image) ? `<figure><img class="zoomable" src="${esc(c.image)}" alt="${esc(c.title)}" width="1200" height="630"></figure>` : '';
+  const crumbs = isArt ? [['/', '首頁'], ['/news/', '最新消息'], [null, fit(c.title, 22)]] : [['/', '首頁'], [null, fit(c.title, 24)]];
+  write(`${isArt ? 'news/' : ''}${c.slug}/index.html`, layout({
+    path: p, cur: isArt ? '/news/' : '', title, desc, crumbs,
+    body: `<article><header class="phead"><span class="badge">${icon(isArt ? 'book' : 'building')}${isArt ? '最新消息' : esc(S.assoc)}</span>${isArt && c.date ? `<time datetime="${esc(c.date)}"> ${esc(c.date)}</time>` : ''}<h1>${esc(c.title)}</h1></header>${hero}${toc.length > 3 ? `<nav class="toc" aria-label="本頁目錄"><b>本頁目錄</b>${toc.slice(0, 10).map(([id, t]) => `<a href="#${id}">${esc(fit(t, 20))}</a>`).join('')}</nav>` : ''}<div class="prose">${html}</div></article>${cta()}`,
+    ld: [{ '@context': 'https://schema.org', '@type': isArt ? 'Article' : 'WebPage', ...(isArt ? { headline: fit(c.title, 110), ...(c.date ? { datePublished: c.date, dateModified: c.date } : {}), author: { '@type': 'Organization', name: S.brandFull }, publisher: { '@id': abs('/#org') }, image: abs(c.image && Y.okImg(c.image) && !c.image.startsWith('data:') ? c.image : S.ogImage) } : { name: c.title, isPartOf: { '@id': abs('/#org') } }), description: desc, url: abs(p), mainEntityOfPage: abs(p), inLanguage: 'zh-TW' }, ...(rr.faq.length ? [faqLd(rr.faq)] : [])]
+  }));
+}
 
 // ---------- 聯絡我們 ----------
 write('contact/index.html', layout({
@@ -415,9 +461,10 @@ write('terms/index.html', layout({
 write('404.html', layout({ noindex: true, path: '/404', title: `找不到頁面｜${S.brand}`, desc: '找不到頁面', body: '<h1>找不到這個頁面</h1><p>這個網址可能已經更新。請<a href="/">回首頁</a>，或從左側選單選擇課程。</p>' }));
 
 // ---------- 靜態檔、SEO 檔 ----------
-for (const f of ['style.css', 'app.js', 'shared.js', 'booking.js', 'admin.css', 'admin.js']) fs.copyFileSync(`src/${f}`, `${OUT}/${f}`);
+for (const f of ['style.css', 'app.js', 'shared.js', 'blocks.js', 'booking.js', 'admin.css', 'admin.js']) fs.copyFileSync(`src/${f}`, `${OUT}/${f}`);
 write('admin/index.html', fs.readFileSync('src/admin.html', 'utf8').replace('/*SITE_JSON*/null', JSON.stringify({ brand: S.brand, courses: S.courses.map(c => ({ slug: c.slug, name: c.name, summary: c.summary, facts: c.facts })), schedule: S.schedule, heroTitle: S.heroTitle, heroSub: S.heroSub, phone: S.phone, address: S.address, hours: S.hours, lineId: S.lineId, email: S.email, faq: S.courses[0].faq.slice(0, 2).concat(S.courses[1].faq.slice(0, 2)) })));
 fs.copyFileSync('src/og.png', `${OUT}/og.png`);
+write('admin/pages.json', JSON.stringify(EDITABLE));
 const urls = [...new Set(pagesIndex.filter(u => u !== '/404'))].sort();
 const today = new Date().toISOString().slice(0, 10);
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `<url><loc>${abs(u)}</loc><lastmod>${today}</lastmod></url>`).join('\n')}\n</urlset>\n`);
@@ -425,7 +472,7 @@ const AI_BOTS = ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'Google-Extended', '
 const blocked = new Set(S.aiBlock || []);
 write('robots.txt', `# 一般搜尋引擎與 AI 搜尋／生成式引擎皆可擷取公開頁面；甲方得於 src/site.json 的 aiBlock 指定排除\nUser-agent: *\nAllow: /\nDisallow: /admin\n\n${AI_BOTS.map(b => `User-agent: ${b}\n${blocked.has(b) ? 'Disallow: /' : 'Allow: /\nDisallow: /admin'}\n`).join('\n')}\nSitemap: ${abs('/sitemap.xml')}\n`);
 write('_headers', `/admin/*\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-store\n/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: SAMEORIGIN\n/*.css\n  Cache-Control: public, max-age=3600\n/*.js\n  Cache-Control: public, max-age=3600\n/img/*\n  Cache-Control: public, max-age=86400\n`);
-write('llms.txt', `# ${S.brandFull}\n\n> ${S.tagline}。${S.heroSub}\n\n## 三大國際證照班\n${S.courses.map(c => `- [${c.name}](${abs(`/courses/${c.slug}/`)}): ${c.desc}`).join('\n')}\n\n## 開課與資訊\n- [最新開課資訊](${abs('/schedule/')})\n- [授課講師介紹](${abs('/teachers/')})\n- [關於我們](${abs('/about/')})\n- [四合一常見問答](${abs('/faq/four-in-one/')})\n- [NLP 學習指南](${abs('/faq/nlp/')})\n\n## 好書佳文分享\n${S.categories.map(c => `- [${c.name}](${abs(`/articles/${c.slug}/`)})`).join('\n')}\n`);
+write('llms.txt', `# ${S.brandFull}\n\n> ${S.tagline}。${S.heroSub}\n\n## 三大國際證照班\n${S.courses.map(c => `- [${c.name}](${abs(`/courses/${c.slug}/`)}): ${c.desc}`).join('\n')}\n\n## 開課與資訊\n- [最新開課資訊](${abs('/schedule/')})\n- [授課講師介紹](${abs('/teachers/')})\n- [關於我們](${abs('/about/')})\n- [四合一常見問答](${abs('/faq/four-in-one/')})\n- [NLP 學習指南](${abs('/faq/nlp/')})\n\n## 好書佳文分享\n${S.categories.map(c => `- [${c.name}](${abs(`/articles/${c.slug}/`)})`).join('\n')}\n${CUSTOM.length ? `\n## 其他頁面與文章\n${CUSTOM.map(c => `- [${c.title}](${abs(c.type === 'article' ? `/news/${c.slug}/` : `/${c.slug}/`)})`).join('\n')}\n` : ''}`);
 // 301：舊網址 → 新網址（Cloudflare Pages）
 const redirects = [...MAP.entries()].filter(([f]) => !['index.html'].includes(f) || true).map(([f, to]) => `/${f} ${to} 301`);
 const srcFiles = fs.readdirSync('source/pages').map(f => f.replace(/\.md$/, ''));
