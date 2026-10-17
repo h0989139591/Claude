@@ -24,19 +24,19 @@
   if(C['seo.title']&&location.pathname==='/')document.title=C['seo.title'];
   if(C['seo.desc']&&location.pathname==='/'){var m=document.querySelector('meta[name=description]');if(m)m.content=C['seo.desc']}
 
-  // 最新消息（後台編輯 → yz_news）
+  // 最新公告（後台新增 → yz_news）：加在最新消息最上方
   var N=null;try{N=JSON.parse(localStorage.getItem('yz_news')||'null')}catch(e){}
   if(N&&N.length){
     document.querySelectorAll('[data-news]').forEach(function(el){
-      var mode=el.getAttribute('data-news'),items=mode==='all'?N:N.slice(0,+mode||3);el.innerHTML='';
-      items.forEach(function(n){
-        if(mode==='all'){var a=document.createElement('article');a.className='news-item';a.id=n.id;
-          var t=document.createElement('time');t.textContent=n.date;var h=document.createElement('h2');h.textContent=n.title;var p=document.createElement('p');p.textContent=n.body;a.append(t,h,p);el.appendChild(a)}
-        else{var li=document.createElement('li'),a2=document.createElement('a');a2.href='/news/#'+n.id;a2.textContent=n.title;var sm=document.createElement('small');sm.textContent=' '+n.date;li.append(a2,sm);el.appendChild(li)}
+      var mode=el.getAttribute('data-news'),items=mode==='all'?N:N.slice(0,+mode||3);
+      items.slice().reverse().forEach(function(n){
+        if(mode==='all'){var a=document.createElement('article');a.className='news-item';
+          var t=document.createElement('time');t.textContent=n.date;var h=document.createElement('h2');h.textContent=n.title;a.append(t,h);
+          if(n.body){var p=document.createElement('p');p.textContent=n.body;a.appendChild(p)}el.insertBefore(a,el.firstChild)}
+        else{var li=document.createElement('li'),sp=document.createElement('span');sp.textContent=n.title;var sm=document.createElement('small');sm.textContent=' '+n.date;li.append(sp,sm);el.insertBefore(li,el.firstChild);while(el.children.length>(+mode||3))el.removeChild(el.lastChild)}
       });
     });
   }
-
 
   // 開課資訊（後台編輯 → yz_sched）：重畫開課頁、首頁與右側欄
   var G=null;try{G=JSON.parse(localStorage.getItem('yz_sched')||'null')}catch(e){}

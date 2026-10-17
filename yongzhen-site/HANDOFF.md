@@ -27,10 +27,11 @@ npx serve dist            # 或 python -m http.server -d dist
 
 ## 待辦（優先順序）
 1. **LOGO 原檔**：`public/img/logo/` 現為舊站頁首裁出的低解析版，請向客戶要 AI／PDF／大尺寸 PNG 後替換（檔名維持 `logo-seal.*`、`logo-loveyoga.*`）。
-2. **最新消息全文**：已請抓 news_details_250～282；回來後放進 `source/pages/`，並在 `build.mjs` 的新聞頁輸出內文（目前只有標題）。
+2. **最新消息**：43 篇全文已整合成 `/news/<編號>/`（已完成）。日期以原站列表頁為準；編號 2 內容過少已轉址到列表；244、264、236 等列表無日期者請對照原站確認。
 3. **客戶確認**：`CONTENT-REVIEW.md` 共 333 筆用語（絕對化、療效、等同學歷、折扣）需客戶決定保留／改寫／刪除；開課資訊頁與專班頁的日期不一致（大陸班、港澳班）。
 4. **缺的資料**：四合一與 TQUK 學費、報名資格、各班退費規則（僅 TQUK 有）、管轄法院、LINE 連結確認、講師照片與同意。
-5. **正式後台**：把示範後台改成 Google Apps Script＋試算表（客戶自己的 Google 帳號，沿用慈惠堂／元多淥的 Line.gs 與後台做法）；LINE 串接、Google 行事曆同步（建置檔列為功能，尚未做）。
+5. **後台風格**：已依使用者回饋改為分組選單＋大字級＋拆小頁。元峰後台的設計參考待提供（見 `source/ref/`），到時微調配色與元件。
+6. **正式後台**：把示範後台改成 Google Apps Script＋試算表（客戶自己的 Google 帳號，沿用慈惠堂／元多淥的 Line.gs 與後台做法）；LINE 串接、Google 行事曆同步（建置檔列為功能，尚未做）。
 6. 上線前：`siteUrl`、`og.png`（用正式 LOGO 重做）、Search Console 提交 sitemap、用 Rich Results Test 與 PageSpeed Insights 驗收。
 
 ## 紅線（來自建置檔）

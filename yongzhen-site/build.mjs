@@ -50,14 +50,22 @@ for (const c of S.courses) MAP.set(c.old.slice(1), `/courses/${c.slug}/`);
 for (const p of S.pages) MAP.set(p.old.slice(1), `/${p.slug}/`);
 for (const f of S.faqPages) MAP.set(f.old.slice(1), `/${f.slug}/`);
 for (const c of S.categories) MAP.set(c.old.slice(1), `/articles/${c.slug}/`);
-const newsIds = new Set(S.news.map(n => n.id));
+// 最新消息：原站 43 篇全文（src/news-meta.json 提供日期與列表標題）
+const NEWS_META = JSON.parse(fs.readFileSync('src/news-meta.json', 'utf8'));
+const thin = id => fs.readFileSync(`source/pages/news_details_${id}.html.md`, 'utf8').replace(/\[圖:[^\]]*\]/g, '').replace(/[^\u4e00-\u9fa5]/g, '').length < 200;
+const THIN = new Set(Object.keys(NEWS_META).filter(thin));
+const NEWS = Object.entries(NEWS_META).filter(([id]) => !THIN.has(id)).map(([id, m]) => ({ id, ...m, src: `news_details_${id}.html.md` })).sort((a, b) => (b.date || '0') < (a.date || '0') ? -1 : 1);
+for (const n of NEWS) MAP.set(`news_details_${n.id}.html`, `/news/${n.id}/`);
+for (const id of THIN) MAP.set(`news_details_${id}.html`, '/news/');
+S.news = NEWS.map(n => ({ id: 'n' + n.id, date: n.date, title: n.title, href: `/news/${n.id}/` }));
+const newsIds = new Set(NEWS.map(n => n.id));
 function mapLink(u) {
   if (/^(tel:|mailto:|#)/.test(u)) return u;
   let m = u.match(/^https?:\/\/(?:www\.)?loveyogalohas\.com\.tw\/?([^?#]*)/i);
   if (!m && /^https?:\/\//i.test(u)) return u;
   const f = (m ? m[1] : u.replace(/^\.?\//, '')).replace(/[?#].*$/, '') || 'index.html';
   if (MAP.has(f)) return MAP.get(f);
-  const nd = f.match(/^news_details_(\d+)\.html$/); if (nd) return newsIds.has('n' + nd[1]) ? `/news/#n${nd[1]}` : '/news/';
+  const nd = f.match(/^news_details_(\d+)\.html$/); if (nd) return newsIds.has(nd[1]) ? `/news/${nd[1]}/` : '/news/';
   return null;
 }
 const DROP = [/特惠\s*\$/, /兩人同行/, /本期獨享特別優惠/];
@@ -71,6 +79,8 @@ const conv = (src, alt) => convert(fs.readFileSync(`source/pages/${src}`, 'utf8'
 function prose(html) {
   let n = 0;
   const toc = [];
+  let last = 1; // 頁面已有 H1；之後的標題不可跳級
+  html = html.replace(/<h([23])>(.*?)<\/h\1>/g, (m, l, t) => { const lv = Math.min(+l, last + 1); last = lv; return `<h${lv}>${t}</h${lv}>`; });
   html = html.replace(/<h2>(.*?)<\/h2>/g, (m, t) => { const id = 's' + (++n); toc.push([id, t.replace(/<[^>]+>/g, '')]); return `<h2 id="${id}">${t}</h2>`; });
   html = html.replace(/(?:<div class="day">[\s\S]*?<\/div>\n?){2,}/g, m => `<div class="days">${m.trim()}</div>\n`);
   return { html, toc };
@@ -137,7 +147,7 @@ ${body}
 <aside class="right">
 <section class="box soon"><h2>${icon('calendar')}最新開課</h2><ul class="soonlist" data-soon="4">${upcoming(4).map(sessionRow).join('')}</ul><a class="more-link" href="/schedule/">全部開課資訊 ${icon('arrow', 'sm')}</a></section>
 <section class="quick" aria-label="快速入口">${quick}</section>
-<section class="box"><h2>${icon('book')}最新消息</h2><ul data-news="3">${S.news.slice(0, 3).map(n => `<li><a href="/news/#${n.id}">${esc(n.title)}</a> <small>${n.date}</small></li>`).join('')}</ul><a class="more-link" href="/news/">更多消息 ${icon('arrow', 'sm')}</a></section>
+<section class="box"><h2>${icon('book')}最新消息</h2><ul data-news="3">${S.news.slice(0, 3).map(n => `<li><a href="${n.href}">${esc(n.title)}</a> <small>${n.date}</small></li>`).join('')}</ul><a class="more-link" href="/news/">更多消息 ${icon('arrow', 'sm')}</a></section>
 <section class="box" id="contact"><h2>${icon('phone')}聯絡資訊</h2><p>電話：${k('phone', S.phone, 'a', ` href="${S.phoneHref}"`)}</p><p>地址：${k('address', S.address)}</p><p>LINE：${k('lineId', S.lineId)}</p><p>E-mail：<a href="mailto:${S.email}">${k('email', S.email)}</a></p></section>
 </aside>
 <footer>
@@ -315,9 +325,34 @@ write('courses/index.html', layout({
 }));
 
 // ---------- 最新消息 ----------
+const fit = (t, n) => t.length > n ? t.slice(0, n - 1) + '…' : t;
+const plainDesc = (html, fallback) => { const t = stripTags(html.replace(/<h[23][^>]*>.*?<\/h[23]>/g, ' ')).replace(/\s+/g, ' '); return t.length >= 40 ? fit(t, 110) : fallback; };
+for (const n of NEWS) {
+  const raw = fs.readFileSync(`source/pages/${n.src}`, 'utf8');
+  // 檔頭到「首頁 > 最新消息」麵包屑與文章標題行之前不要
+  const ls = raw.replace(/\r/g, '').split('\n');
+  const bi = ls.findIndex(l => /首頁\s*>\s*最新消息/.test(l));
+  let j = bi + 1; while (j < ls.length && !ls[j].trim()) j++; j++; // 略過標題行
+  let body = ls.slice(j);
+  // 第一個「# 標題」當作文章 H1
+  const hi = body.findIndex(l => /^#\s*\S/.test(l)); let h1 = '';
+  if (hi >= 0 && hi < 6) { h1 = body[hi].replace(/^#\s*/, '').trim(); body.splice(hi, 1); }
+  const r = convert('H2:\n\n' + body.join('\n'), { links: mapLink, linkLabel, images: IMAGES, alt: `${h1 || n.title}：文章配圖`, drop: DROP });
+  const { html, toc } = prose(r.html);
+  const title1 = h1 || n.title;
+  n.h1 = title1; n.html = html; n.toc = toc; n.text = r.text; n.img = r.images[0];
+  n.desc = plainDesc(html, `${fit(title1, 40)}：${S.assoc}最新消息，選課指南與國際證照解析。`);
+  const p = `/news/${n.id}/`;
+  write(`news/${n.id}/index.html`, layout({
+    path: p, cur: '/news/', title: `${fit(title1, 46)}｜最新消息｜${S.brand}`, desc: n.desc, crumbs: [['/', '首頁'], ['/news/', '最新消息'], [null, fit(title1, 22)]],
+    body: `<article><header class="phead">${n.date ? `<time datetime="${n.date}">${n.date}</time>` : ''}<h1>${esc(title1)}</h1>${n.title !== title1 ? `<p>${esc(n.title)}</p>` : ''}</header>
+${toc.length > 3 ? `<nav class="toc" aria-label="本文目錄"><b>本文目錄</b>${toc.slice(0, 10).map(([id, t]) => `<a href="#${id}">${esc(fit(t, 20))}</a>`).join('')}</nav>` : ''}<div class="prose">${html}</div></article>${cta('想進一步了解？')}`,
+    ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: fit(title1, 110), description: n.desc, ...(n.date ? { datePublished: n.date, dateModified: n.date } : {}), author: { '@type': 'Organization', name: S.brandFull }, publisher: { '@id': abs('/#org') }, image: abs(n.img || S.ogImage), mainEntityOfPage: abs(p), inLanguage: 'zh-TW' }]
+  }));
+}
 write('news/index.html', layout({
-  path: '/news/', title: `最新消息｜選課指南與國際證照解析｜${S.brand}`, desc: `${S.assoc}最新消息：選課指南、國際證照解析、第二專長與身心整合學習文章，以及開課公告。`, crumbs: [['/', '首頁'], [null, '最新消息']],
-  body: `<header class="phead"><h1>最新消息</h1><p>選課指南、證照解析與開課公告。</p></header><div id="newsList" data-news="all">${S.news.map(n => `<article class="news-item" id="${n.id}"><time datetime="${n.date}">${n.date}</time><h2>${esc(n.title)}</h2>${n.body ? `<p>${esc(n.body)}</p>` : ''}</article>`).join('')}</div>`
+  path: '/news/', title: `最新消息｜選課指南與國際證照解析｜${S.brand}`, desc: `${S.assoc}最新消息：選課指南、國際證照解析、第二專長與身心整合學習文章，以及開課公告與說明會資訊。`, crumbs: [['/', '首頁'], [null, '最新消息']],
+  body: `<header class="phead"><h1>最新消息</h1><p>選課指南、證照解析、說明會與開課公告，共 ${NEWS.length} 篇。</p></header><div id="newsList" data-news="all">${NEWS.map(n => `<article class="news-item" id="n${n.id}"><time datetime="${n.date}">${n.date || '　'}</time><h2><a href="/news/${n.id}/">${esc(n.title)}</a></h2></article>`).join('')}</div>`
 }));
 
 // ---------- 聯絡我們 ----------
@@ -381,7 +416,7 @@ write('404.html', layout({ noindex: true, path: '/404', title: `找不到頁面�
 
 // ---------- 靜態檔、SEO 檔 ----------
 for (const f of ['style.css', 'app.js', 'shared.js', 'booking.js', 'admin.css', 'admin.js']) fs.copyFileSync(`src/${f}`, `${OUT}/${f}`);
-write('admin/index.html', fs.readFileSync('src/admin.html', 'utf8').replace('/*SITE_JSON*/null', JSON.stringify({ brand: S.brand, courses: S.courses.map(c => ({ slug: c.slug, name: c.name, summary: c.summary, facts: c.facts })), news: S.news, schedule: S.schedule, heroTitle: S.heroTitle, heroSub: S.heroSub, phone: S.phone, address: S.address, hours: S.hours, lineId: S.lineId, email: S.email, faq: S.courses[0].faq.slice(0, 2).concat(S.courses[1].faq.slice(0, 2)) })));
+write('admin/index.html', fs.readFileSync('src/admin.html', 'utf8').replace('/*SITE_JSON*/null', JSON.stringify({ brand: S.brand, courses: S.courses.map(c => ({ slug: c.slug, name: c.name, summary: c.summary, facts: c.facts })), schedule: S.schedule, heroTitle: S.heroTitle, heroSub: S.heroSub, phone: S.phone, address: S.address, hours: S.hours, lineId: S.lineId, email: S.email, faq: S.courses[0].faq.slice(0, 2).concat(S.courses[1].faq.slice(0, 2)) })));
 fs.copyFileSync('src/og.png', `${OUT}/og.png`);
 const urls = [...new Set(pagesIndex.filter(u => u !== '/404'))].sort();
 const today = new Date().toISOString().slice(0, 10);
