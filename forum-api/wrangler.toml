@@ -1,0 +1,25 @@
+name = "compliant-forum-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+ENVIRONMENT = "production"
+MIN_AGE = "18"
+# Moderation thresholds (0..1)
+NSFW_PENDING_THRESHOLD = "0.6"   # >= : hold for human review
+MINOR_BLOCK_THRESHOLD  = "0.2"   # >= : zero tolerance, block + escalate
+MAX_UPLOAD_BYTES = "5242880"
+# Secrets (set with `wrangler secret put`): MODERATION_API_URL, MODERATION_API_KEY
+
+[[d1_databases]]
+binding = "DB"
+database_name = "forum-db"
+database_id = "REPLACE_WITH_D1_ID"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_ID"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "forum-media"   # keep private; serve via signed/authorized Worker route only
